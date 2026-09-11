@@ -1,12 +1,7 @@
 import type { GameState, NodeId, SeatId } from '@denimcat/engine-love-triangles';
-import { NODES, LINKS, effectiveCost } from '@denimcat/engine-love-triangles';
-
-const SEAT_COLOR_VAR: Record<SeatId, string> = {
-  p1: 'var(--seat-1)',
-  p2: 'var(--seat-2)',
-  p3: 'var(--seat-3)',
-  p4: 'var(--seat-4)',
-};
+import { NODES, LINKS } from '@denimcat/engine-love-triangles';
+import { SEAT_COLOR_VAR } from '../seatColors';
+import { costSegments } from '../costSegments';
 
 const VIEWBOX = 400;
 const PADDING = 40;
@@ -35,12 +30,15 @@ export function MapBoard({
   state,
   crossingLinkIds = [],
   previewLinkId = null,
+  mySeat = null,
 }: {
   state: GameState;
   /** Owned lines currently called out as "the reason" a display card is about to be removed — see useLoveTrianglesActions's pendingRemoval. */
   crossingLinkIds?: string[];
   /** A hovered display card's link (buyable or not) — drawn as a dimmed hypothetical, regardless of whose color would actually own it. */
   previewLinkId?: string | null;
+  /** The local viewer's own seat, if they're seated — colors the hover preview so it doubles as "which color am I" reminder. Spectators get a neutral color. */
+  mySeat?: SeatId | null;
 }) {
   const ownerByLink = new Map<string, SeatId>();
   for (const seat of state.seats) {
@@ -87,7 +85,10 @@ export function MapBoard({
           const a = toSvg(NODES[link.a]);
           const b = toSvg(NODES[link.b]);
           const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-          const cost = effectiveCost(state, previewLinkId, state.activeSeat);
+          const previewColor = mySeat ? SEAT_COLOR_VAR[mySeat] : 'var(--text)';
+          const segments = costSegments(state, previewLinkId, state.activeSeat);
+          const label = segments.map((s) => s.amount).join('+');
+          const boxWidth = Math.max(24, label.length * 7 + 10);
           return (
             <g>
               <line
@@ -95,15 +96,29 @@ export function MapBoard({
                 y1={a.y}
                 x2={b.x}
                 y2={b.y}
-                stroke="var(--text)"
+                stroke={previewColor}
                 strokeWidth={3}
                 strokeDasharray="6 5"
                 strokeLinecap="round"
-                opacity={0.35}
+                opacity={0.55}
               />
-              <circle cx={mid.x} cy={mid.y} r={11} fill="var(--panel-bg)" stroke="var(--border)" strokeWidth={1} />
-              <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold" fill="var(--text)">
-                {cost.total}
+              <rect
+                x={mid.x - boxWidth / 2}
+                y={mid.y - 11}
+                width={boxWidth}
+                height={22}
+                rx={6}
+                fill="var(--panel-bg)"
+                stroke="var(--border)"
+                strokeWidth={1}
+              />
+              <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold">
+                {segments.map((s, i) => (
+                  <tspan key={i} fill={s.color}>
+                    {i > 0 ? '+' : ''}
+                    {s.amount}
+                  </tspan>
+                ))}
               </text>
             </g>
           );

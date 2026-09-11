@@ -23,6 +23,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           state={gameState}
           crossingLinkIds={pendingRemoval?.crossedLinks ?? []}
           previewLinkId={hoveredLinkId}
+          mySeat={mySeat}
         />
         <div style={{ width: '100%' }}>
           <DisplayTrack

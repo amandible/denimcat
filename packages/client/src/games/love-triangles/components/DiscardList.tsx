@@ -5,7 +5,6 @@ export function DiscardList({ state }: { state: GameState }) {
   return (
     <div style={{ marginTop: 16 }}>
       <h3 style={{ marginBottom: 6 }}>Discarded</h3>
-      <p style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--muted)' }}>{state.deck.length} left in the draw deck.</p>
       {state.discardPile.length === 0 ? (
         <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>None yet.</p>
       ) : (
@@ -29,6 +28,7 @@ export function DiscardList({ state }: { state: GameState }) {
           })}
         </div>
       )}
+      <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--muted)' }}>{state.deck.length} left in the draw deck.</p>
     </div>
   );
 }

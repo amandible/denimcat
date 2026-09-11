@@ -1,5 +1,6 @@
 import type { GameState, LinkId } from '@denimcat/engine-love-triangles';
 import { effectiveCost, LINKS } from '@denimcat/engine-love-triangles';
+import { costSegments } from '../costSegments';
 
 /**
  * Kept intentionally simple for now — text rather than a mini-map-per-card
@@ -39,26 +40,46 @@ export function DisplayTrack({
     const clickable = buyable && canBuy && affordable;
     const isDoomed = id === doomedLinkId;
     return (
+      // Deliberately not a native `disabled` button: disabled form controls
+      // suppress hover events in most browsers, which was silently killing
+      // the map preview line for every card except the one currently
+      // buyable. Click is gated in the handler instead, and disabled-ness
+      // is communicated purely visually.
       <button
         key={key}
-        className="btn"
-        disabled={!clickable || isDoomed}
-        onClick={() => onBuy?.(id)}
+        onClick={() => {
+          if (clickable && !isDoomed) onBuy?.(id);
+        }}
         onMouseEnter={() => onHoverLink?.(id)}
         onMouseLeave={() => onHoverLink?.(null)}
         style={{
           flex: 1,
+          fontFamily: 'inherit',
+          fontSize: 15,
+          background: 'var(--panel-bg)',
+          color: 'var(--text)',
+          borderRadius: 8,
           padding: 10,
           textAlign: 'center',
-          border: isDoomed ? '2px solid crimson' : buyable && affordable ? '2px solid var(--accent)' : undefined,
+          cursor: clickable && !isDoomed ? 'pointer' : 'default',
+          border: isDoomed ? '2px solid crimson' : buyable && affordable ? '2px solid var(--accent)' : '1px solid var(--border)',
           opacity: isDoomed ? 0.6 : 1,
         }}
       >
         <div style={{ fontWeight: 'bold' }}>
           {link.a}–{link.b}
         </div>
-        <div style={{ fontSize: 13, color: isDoomed ? 'crimson' : 'var(--muted)' }}>
-          {isDoomed ? 'crossed!' : cost.total}
+        <div style={{ fontSize: 13 }}>
+          {isDoomed ? (
+            <span style={{ color: 'crimson' }}>crossed!</span>
+          ) : (
+            costSegments(state, id, activeSeat).map((s, i) => (
+              <span key={i} style={{ color: s.color, fontWeight: i === 0 ? 'normal' : 'bold' }}>
+                {i > 0 ? '+' : ''}
+                {s.amount}
+              </span>
+            ))
+          )}
         </div>
       </button>
     );
