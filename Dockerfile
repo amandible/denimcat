@@ -1,31 +1,25 @@
 # Builds the denimcat socket server for deployment (Fly.io, Railway, etc).
 # Build context must be the repo root (not packages/server) since the server
-# depends on its sibling workspace packages (@denimcat/shared,
-# @denimcat/platform, @denimcat/engine-hyperbloom).
+# depends on its sibling workspace packages.
 #
 # Runs the server via `tsx` directly rather than a separate `tsc` build step
 # — this sidesteps Node ESM's requirement for explicit `.js` extensions on
 # every relative import, which the rest of the codebase doesn't use.
+#
+# Copies the whole packages/ tree in one shot rather than enumerating each
+# workspace package individually — the previous per-package COPY list twice
+# caused a silent production crash (ERR_MODULE_NOT_FOUND) when a new engine
+# package was added but not also added here. With more games planned, a new
+# package should never need a Dockerfile change to deploy correctly.
 
 FROM node:22-slim
 
 WORKDIR /app
 
 COPY package.json package-lock.json tsconfig.base.json ./
-COPY packages/shared/package.json packages/shared/package.json
-COPY packages/platform/package.json packages/platform/package.json
-COPY packages/engine-hyperbloom/package.json packages/engine-hyperbloom/package.json
-COPY packages/engine-mint-condition/package.json packages/engine-mint-condition/package.json
-COPY packages/server/package.json packages/server/package.json
-COPY packages/client/package.json packages/client/package.json
+COPY packages packages
 
 RUN npm ci
-
-COPY packages/shared packages/shared
-COPY packages/platform packages/platform
-COPY packages/engine-hyperbloom packages/engine-hyperbloom
-COPY packages/engine-mint-condition packages/engine-mint-condition
-COPY packages/server packages/server
 
 ENV NODE_ENV=production
 WORKDIR /app/packages/server
