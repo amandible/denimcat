@@ -24,6 +24,7 @@ RUN npm ci
 COPY packages/shared packages/shared
 COPY packages/platform packages/platform
 COPY packages/engine-hyperbloom packages/engine-hyperbloom
+COPY packages/engine-mint-condition packages/engine-mint-condition
 COPY packages/server packages/server
 
 ENV NODE_ENV=production
