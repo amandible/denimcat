@@ -8,5 +8,6 @@ build/
 coverage/
 .vercel/
 
-# Reference scans of the physical game's copyrighted card text — kept local only.
-hyper_bloom_card_text*.pdf
+# Game design docs (rules, reference scans, generated map data) — local only,
+# not version-controlled.
+design/
