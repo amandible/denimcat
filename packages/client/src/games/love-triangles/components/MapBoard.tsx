@@ -34,10 +34,13 @@ const toSvg = buildTransform(NODES);
 export function MapBoard({
   state,
   crossingLinkIds = [],
+  previewLinkId = null,
 }: {
   state: GameState;
   /** Owned lines currently called out as "the reason" a display card is about to be removed — see useLoveTrianglesActions's pendingRemoval. */
   crossingLinkIds?: string[];
+  /** A hovered display card's link (buyable or not) — drawn as a dimmed hypothetical, regardless of whose color would actually own it. */
+  previewLinkId?: string | null;
 }) {
   const ownerByLink = new Map<string, SeatId>();
   for (const seat of state.seats) {
@@ -78,6 +81,25 @@ export function MapBoard({
           </g>
         );
       })}
+      {previewLinkId &&
+        (() => {
+          const link = LINKS[previewLinkId];
+          const a = toSvg(NODES[link.a]);
+          const b = toSvg(NODES[link.b]);
+          return (
+            <line
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              stroke="var(--text)"
+              strokeWidth={3}
+              strokeDasharray="6 5"
+              strokeLinecap="round"
+              opacity={0.35}
+            />
+          );
+        })()}
     </svg>
   );
 }

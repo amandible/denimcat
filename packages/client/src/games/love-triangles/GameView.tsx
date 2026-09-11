@@ -1,11 +1,15 @@
-import type { SeatId } from '@denimcat/engine-love-triangles';
+import { useState } from 'react';
+import type { LinkId, SeatId } from '@denimcat/engine-love-triangles';
+import { LINKS } from '@denimcat/engine-love-triangles';
 import type { LoveTrianglesConnection } from './useLoveTrianglesActions';
 import { MapBoard } from './components/MapBoard';
 import { DisplayTrack } from './components/DisplayTrack';
+import { DiscardList } from './components/DiscardList';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: LoveTrianglesConnection }) {
   const { gameState, you, pendingRemoval, animating } = connection;
+  const [hoveredLinkId, setHoveredLinkId] = useState<LinkId | null>(null);
   if (!gameState || !you) return null;
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
@@ -15,13 +19,18 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px', display: 'flex', gap: 28, flexWrap: 'wrap' }}>
       <div style={{ flex: '2 1 420px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
         <h2 style={{ alignSelf: 'flex-start', marginBottom: 0 }}>Room {roomCode}</h2>
-        <MapBoard state={gameState} crossingLinkIds={pendingRemoval?.crossedLinks ?? []} />
+        <MapBoard
+          state={gameState}
+          crossingLinkIds={pendingRemoval?.crossedLinks ?? []}
+          previewLinkId={hoveredLinkId}
+        />
         <div style={{ width: '100%' }}>
           <DisplayTrack
             state={gameState}
             canBuy={isMyTurn}
             doomedLinkId={pendingRemoval?.linkId ?? null}
             onBuy={(linkId) => connection.buyLink(linkId)}
+            onHoverLink={setHoveredLinkId}
           />
         </div>
       </div>
@@ -43,6 +52,8 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
             </li>
           ))}
         </ul>
+
+        <DiscardList state={gameState} />
 
         {mySeat && isMyTurn && (
           <div style={{ marginTop: 16 }}>

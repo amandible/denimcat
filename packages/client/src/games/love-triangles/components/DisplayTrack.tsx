@@ -11,6 +11,7 @@ export function DisplayTrack({
   onBuy,
   canBuy,
   doomedLinkId,
+  onHoverLink,
 }: {
   state: GameState;
   onBuy?: (linkId: LinkId) => void;
@@ -18,6 +19,8 @@ export function DisplayTrack({
   canBuy: boolean;
   /** The card currently called out as about to be removed as unplayable — see useLoveTrianglesActions's pendingRemoval. */
   doomedLinkId?: LinkId | null;
+  /** Fired on hover/unhover of any card, buyable or not — lets the map show the hypothetical line. */
+  onHoverLink?: (linkId: LinkId | null) => void;
 }) {
   const activeSeat = state.activeSeat;
   const activeGems = state.players[activeSeat].gems;
@@ -41,6 +44,8 @@ export function DisplayTrack({
         className="btn"
         disabled={!clickable || isDoomed}
         onClick={() => onBuy?.(id)}
+        onMouseEnter={() => onHoverLink?.(id)}
+        onMouseLeave={() => onHoverLink?.(null)}
         style={{
           flex: 1,
           padding: 10,

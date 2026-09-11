@@ -15,6 +15,7 @@ export function makeState(
     activeSeat?: SeatId;
     phase?: GameState['phase'];
     winner?: SeatId[] | null;
+    discardPile?: LinkId[];
   } = {},
 ): GameState {
   const seats = overrides.seats ?? ['p1', 'p2'];
@@ -32,5 +33,6 @@ export function makeState(
     activeSeat: overrides.activeSeat ?? seats[0],
     phase: overrides.phase ?? 'playing',
     winner: overrides.winner ?? null,
+    discardPile: overrides.discardPile ?? [],
   };
 }

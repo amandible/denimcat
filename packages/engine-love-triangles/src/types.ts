@@ -31,6 +31,8 @@ export interface GameState {
   phase: Phase;
   /** Multiple seats on a tie. */
   winner: SeatId[] | null;
+  /** Links removed from the game after becoming unplayable (crossed an already-drawn line) — public, so players can see what's gone. */
+  discardPile: LinkId[];
 }
 
 export type { EngineError } from '@denimcat/shared';

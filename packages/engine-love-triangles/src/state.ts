@@ -28,6 +28,7 @@ export function cloneState(state: GameState): GameState {
     activeSeat: state.activeSeat,
     phase: state.phase,
     winner: state.winner ? [...state.winner] : null,
+    discardPile: [...state.discardPile],
   };
 }
 

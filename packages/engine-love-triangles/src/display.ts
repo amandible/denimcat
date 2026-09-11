@@ -55,6 +55,7 @@ export function sweepUnplayable(state: GameState): { state: GameState; events: R
     }
     if (found.row === 'top') next.topRow[found.index] = null;
     else next.bottomRow[found.index] = null;
+    next.discardPile = [...next.discardPile, found.id];
 
     next = refillDisplay(next);
     events.push({ kind: 'removed_unplayable', linkId: found.id, crossedLinks: [...crossedLinks], paidTo, state: next });

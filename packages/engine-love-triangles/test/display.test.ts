@@ -39,6 +39,7 @@ describe('sweepUnplayable', () => {
     expect(next.bottomRow).toEqual(['I-J', 'H-I', 'H-J']);
     expect(next.deck).toEqual([]);
     expect(next.players.p1.gems).toBe(11);
+    expect(next.discardPile).toEqual(['C-E']);
 
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('removed_unplayable');
@@ -67,6 +68,7 @@ describe('sweepUnplayable', () => {
     // lines it crosses — "even a player who owns multiple relevant lines
     // only gets one gem" — but two separate removals still each pay once).
     expect(next.players.p1.gems).toBe(12);
+    expect(next.discardPile).toEqual(['C-E', 'F-G']);
 
     expect(events.map((e) => e.linkId)).toEqual(['C-E', 'F-G']); // in scan order, one at a time
     expect(events.every((e) => e.paidTo.p1 === 1)).toBe(true);

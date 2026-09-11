@@ -33,5 +33,6 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     activeSeat: seats[0],
     phase: 'playing',
     winner: null,
+    discardPile: [],
   };
 }
