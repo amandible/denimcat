@@ -1,5 +1,5 @@
 import type { GameState, NodeId, SeatId } from '@denimcat/engine-love-triangles';
-import { NODES, LINKS } from '@denimcat/engine-love-triangles';
+import { NODES, LINKS, effectiveCost } from '@denimcat/engine-love-triangles';
 
 const SEAT_COLOR_VAR: Record<SeatId, string> = {
   p1: 'var(--seat-1)',
@@ -86,18 +86,26 @@ export function MapBoard({
           const link = LINKS[previewLinkId];
           const a = toSvg(NODES[link.a]);
           const b = toSvg(NODES[link.b]);
+          const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          const cost = effectiveCost(state, previewLinkId, state.activeSeat);
           return (
-            <line
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              stroke="var(--text)"
-              strokeWidth={3}
-              strokeDasharray="6 5"
-              strokeLinecap="round"
-              opacity={0.35}
-            />
+            <g>
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke="var(--text)"
+                strokeWidth={3}
+                strokeDasharray="6 5"
+                strokeLinecap="round"
+                opacity={0.35}
+              />
+              <circle cx={mid.x} cy={mid.y} r={11} fill="var(--panel-bg)" stroke="var(--border)" strokeWidth={1} />
+              <text x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold" fill="var(--text)">
+                {cost.total}
+              </text>
+            </g>
           );
         })()}
     </svg>
