@@ -79,17 +79,34 @@ export function useLoveTrianglesActions(roomCode: string) {
     }
   }, [connection.status]);
 
-  // Seed the display directly from the connection's own state, but only
-  // once right after joining/reconnecting — never on every change. The
-  // server always emits the authoritative `game_state` broadcast *before*
-  // the event log for a mutation, so mirroring it continuously would snap
-  // the board to the final result before the animation events even arrive.
-  // Every update during play comes from the event queue instead.
+  // Self-healing resync: whenever the connection's authoritative state
+  // changes (an initial join, a reconnect ack, or a live mutation's
+  // broadcast) and no animation event log shows up to explain it within a
+  // short grace window, just adopt it directly.
+  //
+  // This — not the event queue — is what actually keeps the board live
+  // across a reconnect: `reconnect_room`'s ack sets `connection.gameState`
+  // directly, but reconnecting never runs a mutation, so it never produces
+  // a `love_triangles_events` follow-up the way a live buy/pass does. An
+  // earlier version of this hook only ever seeded `displayedState` once
+  // (the first time it was null) and otherwise relied solely on the event
+  // queue — which silently stopped tracking reality after any socket drop
+  // and reconnect (a Fly cold-start between turns, a network blip, a
+  // backgrounded tab), since reconnecting produces no event log to drain.
+  // The grace window is what still lets a live mutation's event log win
+  // the race and animate normally: `game_state` and its event log are
+  // emitted back-to-back server-side, so the log is already draining
+  // (`processingRef.current` true) well before this timer fires.
   useEffect(() => {
-    if (connection.status === 'in-room' && connection.gameState && displayedState === null) {
-      setDisplayedState(connection.gameState);
-    }
-  }, [connection.status, connection.gameState, displayedState]);
+    if (connection.status !== 'in-room' || !connection.gameState) return;
+    const state = connection.gameState;
+    const timer = setTimeout(() => {
+      if (!processingRef.current && queueRef.current.length === 0) {
+        setDisplayedState(state);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [connection.status, connection.gameState]);
 
   const buyLink = useCallback((linkId: LinkId) => connection.sendAction('buy_link', { linkId }), [connection]);
   const pass = useCallback(() => connection.sendAction('pass'), [connection]);
