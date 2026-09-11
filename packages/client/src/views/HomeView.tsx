@@ -5,7 +5,7 @@ export function HomeView() {
     <main style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
       <div style={{ width: '100%' }}>
         <h1 style={{ fontSize: 36, textAlign: 'center' }}>denimcat</h1>
-        <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 0 }}>Pick a game to play with friends.</p>
+        <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 0 }}>Pick a game to play.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
           {GAMES.map((game) => (
             <a
