@@ -70,6 +70,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
             <NewPrizeSlotPicker
               revealedPrize={gameState.revealedPrize}
               priceSlots={gameState.priceSlots}
+              unlockedUpperSlots={gameState.unlockedUpperSlots}
               onPlace={(slotIndex) => connection.placeNewPrize(slotIndex)}
             />
           </div>

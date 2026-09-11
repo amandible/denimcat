@@ -63,6 +63,15 @@ export interface GameState {
   auction: AuctionState;
   /** Multiple seats on a tie. */
   winner: SeatId[] | null;
+  /**
+   * Indices of the top two price slots that have become legal targets for
+   * manual placement (via placeNewPrize) because a prize has naturally
+   * drifted into them at least once via shiftDisplay — confirmed with the
+   * designer as a permanent unlock, not re-locked when the slot empties out
+   * again. Prevents an early auction winner from throwing a prize into a
+   * slot nobody can afford yet.
+   */
+  unlockedUpperSlots: number[];
 }
 
 export type { EngineError } from '@denimcat/shared';

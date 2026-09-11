@@ -41,6 +41,31 @@ describe('shiftDisplay', () => {
     const next = shiftDisplay(state);
     for (const slot of next.priceSlots) expect(slot.prizes).toEqual([]);
   });
+
+  it('unlocks the top two slots the first time a prize naturally drifts into each', () => {
+    const state = makeState({
+      unlockedUpperSlots: [],
+      priceSlots: [
+        { price: 1, prizes: [] },
+        { price: 2, prizes: [] },
+        { price: 3, prizes: [] },
+        { price: 4, prizes: [prize('a', 'red', 1)] },
+        { price: 5, prizes: [] },
+        { price: 6, prizes: [] },
+      ],
+    });
+    const afterFirstShift = shiftDisplay(state);
+    expect(afterFirstShift.unlockedUpperSlots).toEqual([4]);
+
+    const afterSecondShift = shiftDisplay(afterFirstShift);
+    expect(afterSecondShift.unlockedUpperSlots.sort()).toEqual([4, 5]);
+  });
+
+  it('never re-locks an already-unlocked upper slot, even once it empties out again', () => {
+    const state = makeState({ unlockedUpperSlots: [4, 5] });
+    const next = shiftDisplay(state);
+    expect(next.unlockedUpperSlots.sort()).toEqual([4, 5]);
+  });
 });
 
 describe('takePrize', () => {
@@ -194,5 +219,24 @@ describe('placeNewPrize', () => {
     expect(result.state.revealedPrize).toBeNull();
     expect(result.state.phase).toBe('auction-active');
     expect(result.state.auction.openerSeat).toBe('p1');
+  });
+
+  it('rejects placing into either of the top two slots before a prize has naturally risen into it', () => {
+    const state = { ...placingState(), unlockedUpperSlots: [] };
+    expect(placeNewPrize(state, 'p1', 4).ok).toBe(false);
+    expect(placeNewPrize(state, 'p1', 5).ok).toBe(false);
+  });
+
+  it('allows placing into a top slot once it has been naturally unlocked', () => {
+    const state = { ...placingState(), unlockedUpperSlots: [4] };
+    expect(placeNewPrize(state, 'p1', 4).ok).toBe(true);
+    expect(placeNewPrize(state, 'p1', 5).ok).toBe(false);
+  });
+
+  it('does not restrict placement into any of the bottom four slots', () => {
+    const state = { ...placingState(), unlockedUpperSlots: [] };
+    for (let i = 0; i < 4; i++) {
+      expect(placeNewPrize(state, 'p1', i).ok).toBe(true);
+    }
   });
 });

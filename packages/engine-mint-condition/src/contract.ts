@@ -41,6 +41,8 @@ export interface MintConditionStateView {
   phase: Phase;
   auction: MintConditionAuctionView;
   winner: SeatId[] | null;
+  /** Indices of the top two slots that are currently legal targets for manual placement — see GameState.unlockedUpperSlots. */
+  unlockedUpperSlots: number[];
 }
 
 /**
@@ -80,6 +82,7 @@ export function toView(state: GameState, viewer: SeatId | 'spectator'): MintCond
       winnerSeat: state.auction.winnerSeat,
     },
     winner: state.winner ? [...state.winner] : null,
+    unlockedUpperSlots: [...state.unlockedUpperSlots],
   };
 }
 

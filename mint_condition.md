@@ -37,6 +37,9 @@ you still pay 20.
 All unbought prizes in the display move up one slot. The winner gets to see the next 
 prize and decide which empty slot to place it in. Two players will then draw a card
 from their money decks: the player who won the auction, and the player who first passed.
+(Note: Winners placing new prizes can't use the upper slots for the first few turns -- a slot
+only becomes available once a prize has risen up into it 'naturally'. This makes the initial
+ramp-up, before players have drawn many cards, gentler.)
 
 Here are the prizes and their point values for a two-player game:
 yellow 5

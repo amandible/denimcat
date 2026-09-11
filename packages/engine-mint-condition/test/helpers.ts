@@ -34,6 +34,7 @@ export function makeState(
     phase?: GameState['phase'];
     auction?: Partial<AuctionState>;
     winner?: SeatId[] | null;
+    unlockedUpperSlots?: number[];
   } = {},
 ): GameState {
   const seats = overrides.seats ?? ['p1', 'p2'];
@@ -50,5 +51,6 @@ export function makeState(
     phase: overrides.phase ?? 'auction-active',
     auction: makeAuction({ turnOrder: seats, activeSeat: seats[0], openerSeat: seats[0], ...overrides.auction }),
     winner: overrides.winner ?? null,
+    unlockedUpperSlots: overrides.unlockedUpperSlots ?? [4, 5],
   };
 }

@@ -172,5 +172,6 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     phase: 'auction-active',
     auction: startAuction(seats, openerSeat),
     winner: null,
+    unlockedUpperSlots: [],
   };
 }

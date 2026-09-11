@@ -9,17 +9,31 @@ import { applyGameEndIfDone } from './scoring';
  * unsold prizes get more expensive over time. A prize already at index 5
  * that goes unbought again is permanently removed from the game rather
  * than staying capped there.
+ *
+ * Also unlocks the top two slots for manual placement (see
+ * `GameState.unlockedUpperSlots`) the first time a prize naturally drifts
+ * into each of them — confirmed with the designer as a permanent unlock,
+ * so once set it's never removed even if the slot empties out again.
  */
 export function shiftDisplay(state: GameState): GameState {
   const next = cloneState(state);
   const lastIndex = next.priceSlots.length - 1;
   const original = next.priceSlots.map((slot) => slot.prizes);
+  const upperIndices = [lastIndex - 1, lastIndex];
 
   next.priceSlots[lastIndex].prizes = []; // discarded outright
   for (let i = lastIndex - 1; i >= 0; i--) {
     next.priceSlots[i + 1].prizes = original[i];
     next.priceSlots[i].prizes = [];
   }
+
+  const newlyUnlocked = upperIndices.filter(
+    (i) => next.priceSlots[i].prizes.length > 0 && !next.unlockedUpperSlots.includes(i),
+  );
+  if (newlyUnlocked.length > 0) {
+    next.unlockedUpperSlots = [...next.unlockedUpperSlots, ...newlyUnlocked];
+  }
+
   return next;
 }
 
@@ -123,6 +137,11 @@ export function placeNewPrize(state: GameState, seat: SeatId, slotIndex: number)
   }
   if (state.priceSlots[slotIndex].prizes.length > 0) {
     return err('SLOT_OCCUPIED', 'That slot is not empty.');
+  }
+  const lastIndex = state.priceSlots.length - 1;
+  const isUpperSlot = slotIndex === lastIndex || slotIndex === lastIndex - 1;
+  if (isUpperSlot && !state.unlockedUpperSlots.includes(slotIndex)) {
+    return err('SLOT_LOCKED', 'That slot is not available for placement until a prize has naturally risen into it.');
   }
   if (!state.revealedPrize) {
     return err('NO_PRIZE_TO_PLACE', 'There is no revealed prize waiting to be placed.');
