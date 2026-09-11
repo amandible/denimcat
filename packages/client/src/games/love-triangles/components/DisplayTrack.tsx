@@ -51,6 +51,7 @@ export function DisplayTrack({
           if (clickable && !isDoomed) onBuy?.(id);
         }}
         onMouseEnter={() => onHoverLink?.(id)}
+        onMouseMove={() => onHoverLink?.(id)}
         onMouseLeave={() => onHoverLink?.(null)}
         style={{
           flex: 1,
@@ -74,7 +75,7 @@ export function DisplayTrack({
             <span style={{ color: 'crimson' }}>crossed!</span>
           ) : (
             costSegments(state, id, activeSeat).map((s, i) => (
-              <span key={i} style={{ color: s.color, fontWeight: i === 0 ? 'normal' : 'bold' }}>
+              <span key={i} style={{ color: s.color, opacity: i === 0 ? 1 : 0.7 }}>
                 {i > 0 ? '+' : ''}
                 {s.amount}
               </span>

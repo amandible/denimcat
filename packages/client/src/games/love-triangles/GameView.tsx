@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { LinkId, SeatId } from '@denimcat/engine-love-triangles';
 import { LINKS, computeScoreBreakdowns } from '@denimcat/engine-love-triangles';
 import type { LoveTrianglesConnection } from './useLoveTrianglesActions';
@@ -10,6 +10,18 @@ import { seatLabel } from './seats';
 export function GameView({ roomCode, connection }: { roomCode: string; connection: LoveTrianglesConnection }) {
   const { gameState, you, pendingRemoval, animating } = connection;
   const [hoveredLinkId, setHoveredLinkId] = useState<LinkId | null>(null);
+
+  // A display slot can be refilled with a different card while the mouse
+  // never leaves that slot's button (no mouseenter/mouseleave fires from a
+  // content change alone) — without this, the preview line would keep
+  // showing the *previous* card that used to be there. Clearing on every
+  // state change means the stale line simply disappears until the mouse
+  // actually moves again (DisplayTrack's onMouseMove then picks up
+  // whatever's really under the pointer).
+  useEffect(() => {
+    setHoveredLinkId(null);
+  }, [gameState]);
+
   if (!gameState || !you) return null;
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
