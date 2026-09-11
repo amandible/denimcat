@@ -8,6 +8,7 @@ import { PassButton } from './components/PassButton';
 import { PrizeChoicePanel } from './components/PrizeChoicePanel';
 import { NewPrizeSlotPicker } from './components/NewPrizeSlotPicker';
 import { ScoreBoard } from './components/ScoreBoard';
+import { PlayerCounts } from './components/PlayerCounts';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: MintConditionConnection }) {
@@ -47,6 +48,8 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
             <> — {pendingSeat === mySeat ? "it's your turn" : `waiting on ${seatLabel(pendingSeat)}`}</>
           )}
         </p>
+
+        <PlayerCounts state={gameState} />
 
         {mySeat && <YourHand hand={myHand} />}
 
