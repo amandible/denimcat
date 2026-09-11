@@ -33,7 +33,7 @@ export function PriceSlotTrack({
             }}
           >
             <div style={{ fontSize: 14, color: 'var(--muted)', minWidth: 24, textAlign: 'right' }}>{slot.price}</div>
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', minHeight: 30, minWidth: 120 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', minHeight: 66, minWidth: 200 }}>
               {slot.prizes.map((prize) => (
                 <PrizeChip key={prize.id} prize={prize} onClick={onPrizeClick && affordable ? () => onPrizeClick(prize.id) : undefined} />
               ))}

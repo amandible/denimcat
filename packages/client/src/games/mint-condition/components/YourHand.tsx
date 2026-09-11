@@ -5,7 +5,7 @@ export function YourHand({ hand }: { hand: number[] }) {
       {hand.length === 0 ? (
         <p style={{ color: 'var(--muted)' }}>Empty</p>
       ) : (
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {hand.map((value, i) => (
             <span
               key={i}
@@ -13,11 +13,12 @@ export function YourHand({ hand }: { hand: number[] }) {
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: 32,
-                height: 44,
+                width: 48,
+                height: 66,
                 borderRadius: 6,
                 border: '1px solid var(--border)',
                 background: 'var(--panel-bg)',
+                fontSize: 20,
                 fontWeight: 'bold',
               }}
             >

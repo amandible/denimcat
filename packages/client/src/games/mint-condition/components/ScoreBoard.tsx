@@ -1,5 +1,5 @@
 import { scoreForPrizes, type MintConditionStateView } from '@denimcat/engine-mint-condition';
-import { seatAccent, seatLabel } from '../seats';
+import { seatLabel } from '../seats';
 
 export function ScoreBoard({ state }: { state: MintConditionStateView }) {
   const ended = state.phase === 'ended';
@@ -15,7 +15,7 @@ export function ScoreBoard({ state }: { state: MintConditionStateView }) {
             key={seat}
             style={{
               margin: '4px 0',
-              color: seatAccent(seat),
+              color: 'var(--text)',
               fontSize: ended ? 20 : 14,
               fontWeight: isWinner ? 'bold' : 500,
             }}

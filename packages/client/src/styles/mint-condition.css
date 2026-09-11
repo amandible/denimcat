@@ -1,6 +1,6 @@
-/* Prize colors and seat accents for Mint Condition — deliberately separate
-   variable names from Hyper Bloom's player-identity colors (--red/--blue
-   mean "which player" there, not a prize color here). */
+/* Prize colors for Mint Condition — deliberately separate variable names
+   from Hyper Bloom's player-identity colors (--red/--blue mean "which
+   player" there, not a prize color here). */
 :root {
   --prize-yellow: #d4a72c;
   --prize-blue: #2b6cb0;
@@ -8,9 +8,4 @@
   --prize-green: #2f8f4e;
   --prize-purple: #7c4dab;
   --prize-orange: #d2691e;
-
-  --seat-1: #c0392b;
-  --seat-2: #2b6cb0;
-  --seat-3: #2f8f4e;
-  --seat-4: #7c4dab;
 }

@@ -9,6 +9,9 @@ const COLOR_VAR: Record<PrizeCard['color'], string> = {
   orange: 'var(--prize-orange)',
 };
 
+// A physical prize card in the real prototype — sized and shaped (a
+// rectangle, rounded less than the .panel slots it sits in) to read as a
+// distinct component rather than a small UI chip.
 export function PrizeChip({ prize, onClick }: { prize: PrizeCard; onClick?: () => void }) {
   const content = (
     <span
@@ -16,12 +19,12 @@ export function PrizeChip({ prize, onClick }: { prize: PrizeCard; onClick?: () =
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: 30,
-        height: 30,
-        borderRadius: '50%',
+        width: 48,
+        height: 66,
+        borderRadius: 6,
         background: COLOR_VAR[prize.color],
         color: 'white',
-        fontSize: 12,
+        fontSize: 20,
         fontWeight: 'bold',
         border: '2px solid white',
         boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
