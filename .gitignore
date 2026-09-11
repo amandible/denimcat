@@ -6,6 +6,7 @@ build/
 *.log
 .DS_Store
 coverage/
+.vercel/
 
 # Reference scans of the physical game's copyrighted card text — kept local only.
 hyper_bloom_card_text*.pdf
