@@ -4,6 +4,8 @@ export type Role<TSeat extends string> = TSeat | 'spectator';
 
 export interface RoomInfo<TSeat extends string> {
   code: string;
+  /** The room's fixed seat list, sized by whatever config it was created with — always present, even for empty seats. */
+  seatOrder: TSeat[];
   seats: Partial<Record<TSeat, { connected: boolean }>>;
   spectatorCount: number;
 }
@@ -14,6 +16,10 @@ export type JoinResult<TSeat extends string, TView> =
 
 export type ActionResult = { ok: true } | { ok: false; error: EngineError };
 
+export type PeekRoomResult<TSeat extends string> =
+  | { ok: true; roomInfo: RoomInfo<TSeat> }
+  | { ok: false; error: EngineError };
+
 /**
  * The room-lifecycle events every game shares verbatim: creating, joining,
  * reconnecting to, and leaving a room. A game's own contract extends these
@@ -23,6 +29,8 @@ export type ActionResult = { ok: true } | { ok: false; error: EngineError };
  */
 export interface RoomLifecycleClientToServerEvents<TSeat extends string, TConfig, TView> {
   create_room: (config: TConfig, cb: (res: { ok: true; roomCode: string } | { ok: false; error: EngineError }) => void) => void;
+  /** Read-only: lets a client learn a room's actual seat list before choosing a role — binds nothing, joins no seat. */
+  peek_room: (payload: { roomCode: string }, cb: (res: PeekRoomResult<TSeat>) => void) => void;
   join_room: (payload: { roomCode: string; role: Role<TSeat> }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
   reconnect_room: (
     payload: { roomCode: string; role: TSeat; seatToken: string },

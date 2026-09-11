@@ -296,7 +296,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       const s = room.seats[seat];
       if (s) seats[seat] = { connected: s.socketId !== null };
     }
-    return { code: room.code, seats, spectatorCount: room.spectatorSocketIds.size };
+    return { code: room.code, seatOrder: [...room.seatOrder], seats, spectatorCount: room.spectatorSocketIds.size };
   }
 
   private broadcastRoomInfo(room: LiveRoom<TState, TSeat>): void {

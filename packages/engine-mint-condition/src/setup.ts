@@ -8,42 +8,90 @@ const SEATS_BY_COUNT: Record<PlayerCount, SeatId[]> = {
 };
 
 /**
- * The setup procedure for the six price slots, given an already-ordered
- * deck to draw from sequentially: 3 individually, then 2+2 summed pairs,
- * then a 3-card sum topped up with a 4th card only if it isn't yet the
- * highest of the five prices already determined. Pulled out as a pure
- * function of a fixed draw order (rather than folded into `computePrices`)
- * so both branches can be tested directly with a hand-picked order, without
- * needing to reverse-engineer what a given `rng` shuffles the deck into.
+ * Repeatedly attempts a draw until its value doesn't collide with anything
+ * in `existing`, undoing (returning to the pool) each rejected attempt's
+ * cards before retrying — "repeated prices aren't allowed; if one would
+ * happen, put those cards back and redraw." Decoupled from the actual
+ * pool/shuffle mechanics so the retry behavior itself can be unit tested
+ * with a scripted sequence of attempts, independent of real randomness.
  */
-export function pricesFromDrawOrder(order: number[]): number[] {
-  let cursor = 0;
-  const draw = (count: number): number[] => {
-    const cards = order.slice(cursor, cursor + count);
-    cursor += count;
-    return cards;
-  };
-  const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
-
-  const individually = draw(3);
-  const price4 = sum(draw(2));
-  const price5 = sum(draw(2));
-  let price6 = sum(draw(3));
-
-  const highestSoFar = Math.max(...individually, price4, price5);
-  if (price6 <= highestSoFar) {
-    price6 += draw(1)[0];
+export function drawUntilUnique(
+  draw: () => { value: number; cards: number[] },
+  undo: (cards: number[]) => void,
+  existing: number[],
+): { value: number; cards: number[] } {
+  while (true) {
+    const attempt = draw();
+    if (!existing.includes(attempt.value)) return attempt;
+    undo(attempt.cards);
   }
-
-  return [...individually, price4, price5, price6];
 }
 
+/**
+ * The setup procedure for the six price slots: draw 3 individually (always
+ * mutually distinct, since they're drawn without replacement from a set of
+ * unique-valued cards), then two 2-card sums, then a 3-card sum topped up
+ * with a 4th card only if it isn't yet the highest of the five prices
+ * already determined. Any sum step whose result repeats an
+ * already-determined price is redrawn as a whole unit — its cards go back
+ * into the pool first.
+ */
 export function computePrices(rng: () => number = Math.random): number[] {
-  const deck = shuffle(
-    Array.from({ length: 13 }, (_, i) => i + 1),
-    rng,
+  let pool = Array.from({ length: 13 }, (_, i) => i + 1);
+  const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
+
+  function draw(count: number): number[] {
+    pool = shuffle(pool, rng);
+    const drawn = pool.slice(0, count);
+    pool = pool.slice(count);
+    return drawn;
+  }
+
+  function returnToPool(cards: number[]): void {
+    pool = [...pool, ...cards];
+  }
+
+  const individually = draw(3);
+
+  const price4Attempt = drawUntilUnique(
+    () => {
+      const cards = draw(2);
+      return { value: sum(cards), cards };
+    },
+    returnToPool,
+    individually,
   );
-  return pricesFromDrawOrder(deck);
+  const price4 = price4Attempt.value;
+
+  const price5Attempt = drawUntilUnique(
+    () => {
+      const cards = draw(2);
+      return { value: sum(cards), cards };
+    },
+    returnToPool,
+    [...individually, price4],
+  );
+  const price5 = price5Attempt.value;
+
+  const priceSoFar = [...individually, price4, price5];
+  const price6Attempt = drawUntilUnique(
+    () => {
+      const threeCards = draw(3);
+      let cards = threeCards;
+      let value = sum(threeCards);
+      if (value <= Math.max(...priceSoFar)) {
+        const fourth = draw(1);
+        cards = [...threeCards, ...fourth];
+        value += fourth[0];
+      }
+      return { value, cards };
+    },
+    returnToPool,
+    priceSoFar,
+  );
+  const price6 = price6Attempt.value;
+
+  return [...individually, price4, price5, price6];
 }
 
 const BASE_PRIZES: Array<[PrizeColor, number]> = [
@@ -110,7 +158,10 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     players[seat] = player;
   }
 
-  const openerSeat = seats[Math.floor(rng() * seats.length)];
+  // Player 1 always opens the first auction (matches Hyper Bloom's
+  // "Red always goes first" precedent) rather than a random seat — more
+  // intuitive than a coin flip nobody can see the result of ahead of time.
+  const openerSeat = seats[0];
 
   return {
     seats,

@@ -26,6 +26,23 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       });
   });
 
+  socket.on('peek_room', (payload: { roomCode?: unknown }, cb: (res: unknown) => void) => {
+    if (!payload || !isNonEmptyString(payload.roomCode)) {
+      cb({ ok: false, error: INVALID_PAYLOAD });
+      return;
+    }
+    store
+      .getRoomInfo(payload.roomCode)
+      .then((roomInfo) => {
+        if (roomInfo) cb({ ok: true, roomInfo });
+        else cb({ ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } });
+      })
+      .catch((error) => {
+        console.error('[socket] peek_room failed:', error);
+        cb({ ok: false, error: INTERNAL_ERROR });
+      });
+  });
+
   socket.on('join_room', (payload: { roomCode?: unknown; role?: unknown }, cb: (res: unknown) => void) => {
     if (!payload || !isNonEmptyString(payload.roomCode) || !isNonEmptyString(payload.role)) {
       cb({ ok: false, error: INVALID_PAYLOAD });

@@ -1,4 +1,4 @@
-export { dealGame, computePrices, pricesFromDrawOrder, buildPrizePool } from './setup';
+export { dealGame, computePrices, drawUntilUnique, buildPrizePool } from './setup';
 export {
   bidOptionsForHand,
   getLegalBidOptions,

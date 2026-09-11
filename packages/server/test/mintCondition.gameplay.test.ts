@@ -73,6 +73,31 @@ describe('Mint Condition room + game flow over real sockets', () => {
     expect(result.error.code).toBe('SEAT_NOT_IN_GAME');
   });
 
+  it("peek_room reports exactly the seats a room actually has, matching its player count", async () => {
+    const socket = await connect();
+    const roomCode = await createRoom(socket, { playerCount: 3 });
+    const peek = await emitAck<any>(socket, 'peek_room', { roomCode });
+    expect(peek.ok).toBe(true);
+    expect(peek.roomInfo.seatOrder).toEqual(['p1', 'p2', 'p3']);
+    // Bug regression: a 3-player room must never offer a p4 seat.
+    expect(peek.roomInfo.seatOrder).not.toContain('p4');
+  });
+
+  it('peek_room does not bind the socket to any seat — it can still join a real one afterward', async () => {
+    const socket = await connect();
+    const roomCode = await createRoom(socket, { playerCount: 2 });
+    await emitAck<any>(socket, 'peek_room', { roomCode });
+    const join = await emitAck<any>(socket, 'join_room', { roomCode, role: 'p1' });
+    expect(join.ok).toBe(true);
+  });
+
+  it('peek_room reports an error for a room that does not exist', async () => {
+    const socket = await connect();
+    const peek = await emitAck<any>(socket, 'peek_room', { roomCode: 'ZZZZ' });
+    expect(peek.ok).toBe(false);
+    expect(peek.error.code).toBe('ROOM_NOT_FOUND');
+  });
+
   it('never reveals another seat\'s hand contents to a player or a spectator', async () => {
     const s1 = await connect();
     const s2 = await connect();

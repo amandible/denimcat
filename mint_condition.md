@@ -16,7 +16,9 @@ done by taking another 1-13 set of cards -- the six prices for this game are set
 - Draw two more cards and add them together. This will be a fifth price.
 - Draw three cards and add them together; if that is not yet the highest price on the table,
 draw a fourth card and add it as well. That will be the sixth price.
-Arrange these prices from highest to lowest.
+Repeated prices aren't allowed; if one would happen (which is possible in the later steps),
+put those cards back and redrew before proceeding to the next step.
+Arrange the prices from highest to lowest.
 
 Draw three prizes and put them in the second, third and fourth price slots. (Each slot
 can hold one or more prizes, or be empty.) Each player draws two cards from their

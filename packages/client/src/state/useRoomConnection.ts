@@ -8,6 +8,8 @@ export type Status = 'connecting' | 'picking-role' | 'in-room';
 
 export interface RoomInfo {
   code: string;
+  /** The room's fixed seat list, sized by whatever config it was created with — always present, even for empty seats. */
+  seatOrder: string[];
   seats: Record<string, { connected: boolean } | undefined>;
   spectatorCount: number;
 }
@@ -53,6 +55,13 @@ export function useRoomConnection<TView>(
     socket.on('connect', () => {
       const stored = loadSeat(gameSlug, roomCode);
       if (!stored) {
+        // Learn the room's actual seat list before showing role-pick
+        // buttons — a static per-game list would offer seats a specific
+        // room (e.g. one created for fewer players) doesn't actually have.
+        socket.emit('peek_room', { roomCode }, (res: any) => {
+          if (res.ok) setRoomInfo(res.roomInfo);
+          else setLastError(res.error.message);
+        });
         setStatus('picking-role');
         return;
       }

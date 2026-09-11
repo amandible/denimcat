@@ -1,19 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrizePool, computePrices, dealGame, pricesFromDrawOrder } from '../src/setup';
+import { buildPrizePool, computePrices, dealGame, drawUntilUnique } from '../src/setup';
 
-describe('pricesFromDrawOrder', () => {
-  it('does not draw a 4th card when the 3-card sum is already the highest price', () => {
-    // individually: 1,2,3 | price4: 4+5=9 | price5: 6+7=13 | threeCards: 8+9+10=27 (> 13, no top-up)
-    const order = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
-    const prices = pricesFromDrawOrder(order);
-    expect(prices).toEqual([1, 2, 3, 9, 13, 27]);
+describe('drawUntilUnique', () => {
+  it('returns the first attempt immediately when it does not collide', () => {
+    let calls = 0;
+    const undone: number[][] = [];
+    const result = drawUntilUnique(
+      () => {
+        calls++;
+        return { value: 7, cards: [3, 4] };
+      },
+      (cards) => undone.push(cards),
+      [1, 2, 3],
+    );
+    expect(result).toEqual({ value: 7, cards: [3, 4] });
+    expect(calls).toBe(1);
+    expect(undone).toEqual([]);
   });
 
-  it('draws a 4th card when the 3-card sum is not yet the highest price', () => {
-    // individually: 10,11,12 | price4: 13+9=22 | price5: 8+7=15 | threeCards: 1+2+3=6 (<=22, top-up with 4)
-    const order = [10, 11, 12, 13, 9, 8, 7, 1, 2, 3, 4, 5, 6];
-    const prices = pricesFromDrawOrder(order);
-    expect(prices).toEqual([10, 11, 12, 22, 15, 10]); // 6 + 4th card (4) = 10
+  it('undoes each colliding attempt and keeps retrying until a unique value is drawn', () => {
+    const attempts = [
+      { value: 5, cards: [2, 3] }, // collides
+      { value: 5, cards: [1, 4] }, // collides again
+      { value: 9, cards: [4, 5] }, // finally unique
+    ];
+    let call = 0;
+    const undone: number[][] = [];
+    const result = drawUntilUnique(
+      () => attempts[call++],
+      (cards) => undone.push(cards),
+      [5, 6, 7],
+    );
+    expect(result).toEqual({ value: 9, cards: [4, 5] });
+    expect(call).toBe(3);
+    expect(undone).toEqual([[2, 3], [1, 4]]);
   });
 });
 
@@ -24,6 +44,13 @@ describe('computePrices', () => {
     for (const p of prices) {
       expect(Number.isInteger(p)).toBe(true);
       expect(p).toBeGreaterThan(0);
+    }
+  });
+
+  it('never produces a repeated price, across many real-random trials', () => {
+    for (let i = 0; i < 300; i++) {
+      const prices = computePrices();
+      expect(new Set(prices).size).toBe(6);
     }
   });
 });
@@ -89,10 +116,10 @@ describe('dealGame', () => {
     }
   });
 
-  it('picks a valid random opener and starts the first auction there', () => {
+  it('always starts the first auction with p1 (never random)', () => {
     const state = dealGame(4, () => 0.9);
-    expect(state.seats).toContain(state.auction.openerSeat);
-    expect(state.auction.activeSeat).toBe(state.auction.openerSeat);
+    expect(state.auction.openerSeat).toBe('p1');
+    expect(state.auction.activeSeat).toBe('p1');
     expect(state.phase).toBe('auction-active');
   });
 });
