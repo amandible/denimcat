@@ -43,6 +43,16 @@ export interface RoomStoreOptions {
  */
 export class RoomStore<TState, TConfig, TSeat extends string> {
   private cache = new Map<string, LiveRoom<TState, TSeat>>();
+  /**
+   * De-dupes concurrent hydration of the same not-yet-cached room code. Two
+   * sockets reconnecting at nearly the same instant (e.g. right after a Fly
+   * machine cold-starts and both players' clients auto-reconnect together)
+   * would otherwise each build and cache their own separate LiveRoom object
+   * for the same code — whichever cache.set() runs second wins, silently
+   * orphaning the socket bound to the first object, which then never
+   * receives another broadcast again.
+   */
+  private hydrating = new Map<string, Promise<LiveRoom<TState, TSeat> | null>>();
   private socketBindings = new Map<string, SocketBinding<TSeat>>();
   private graceTimers = new Map<string, NodeJS.Timeout>();
   private sweepTimer: NodeJS.Timeout;
@@ -101,6 +111,15 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     const cached = this.cache.get(code);
     if (cached) return cached;
 
+    const inFlight = this.hydrating.get(code);
+    if (inFlight) return inFlight;
+
+    const promise = this.hydrateRoom(code).finally(() => this.hydrating.delete(code));
+    this.hydrating.set(code, promise);
+    return promise;
+  }
+
+  private async hydrateRoom(code: string): Promise<LiveRoom<TState, TSeat> | null> {
     const persisted = await this.repository.get(code);
     if (!persisted) return null;
     if (persisted.gameId !== this.module.id) return null; // belongs to a different game's namespace
