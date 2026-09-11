@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { determineWinners, isGameOver, scoreForPlayer } from '../src/scoring';
+import { determineWinners, isGameOver, scoreBreakdownForPlayer, scoreForPlayer } from '../src/scoring';
 import { makeState } from './helpers';
 
 describe('scoreForPlayer', () => {
@@ -31,6 +31,20 @@ describe('scoreForPlayer', () => {
       },
     });
     expect(scoreForPlayer(state, 'p1')).toBe(7);
+  });
+});
+
+describe('scoreBreakdownForPlayer', () => {
+  it('matches scoreForPlayer\'s total and exposes the winning loop/reachable split', () => {
+    const state = makeState({ players: { p1: { ownedLinks: ['A-B', 'A-D', 'B-D', 'E-G', 'E-H', 'G-H', 'F-H'] } } });
+    const breakdown = scoreBreakdownForPlayer(state, 'p1');
+    expect(breakdown).toEqual({ loopSize: 3, reachable: 1, total: 7 });
+    expect(breakdown.total).toBe(scoreForPlayer(state, 'p1'));
+  });
+
+  it('reports the trivial 1-node loop for a player with no owned links', () => {
+    const state = makeState({ players: { p1: { ownedLinks: [] } } });
+    expect(scoreBreakdownForPlayer(state, 'p1')).toEqual({ loopSize: 1, reachable: 0, total: 2 });
   });
 });
 

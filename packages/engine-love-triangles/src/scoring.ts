@@ -60,6 +60,14 @@ function largestCycleSize(component: NodeId[], adjacency: Partial<Record<NodeId,
   return best;
 }
 
+export interface ScoreBreakdown {
+  /** Size of the winning candidate loop (a real cycle, or 1 for the trivial single-node case). */
+  loopSize: number;
+  /** Other nodes reachable via the player's own edges from that loop — always componentSize - loopSize. */
+  reachable: number;
+  total: number;
+}
+
 /**
  * For each player: the maximum, over every candidate "loop," of
  * `2 x (loop size) + (other nodes reachable via their own edges from that
@@ -73,25 +81,38 @@ function largestCycleSize(component: NodeId[], adjacency: Partial<Record<NodeId,
  * for whichever component/loop combination scores highest — no need to
  * separately enumerate reachable sets.
  */
-export function scoreForPlayer(state: GameState, seat: SeatId): number {
+export function scoreBreakdownForPlayer(state: GameState, seat: SeatId): ScoreBreakdown {
   const ownedLinks = state.players[seat].ownedLinks;
-  if (ownedLinks.length === 0) return 2; // any of the 10 map nodes works as a trivial 1-node loop
-
   const adjacency = buildAdjacency(ownedLinks);
   const components = findConnectedComponents(adjacency);
 
-  let best = 0;
+  // The trivial 1-node loop is always legal, even with zero owned edges.
+  let best: ScoreBreakdown = { loopSize: 1, reachable: 0, total: 2 };
   for (const component of components) {
     const edgeCount = component.reduce((sum, node) => sum + (adjacency[node]?.length ?? 0), 0) / 2;
     const hasCycle = edgeCount >= component.length; // a connected graph is a tree iff edges = nodes - 1
     const loopSize = hasCycle ? largestCycleSize(component, adjacency) : 1;
-    best = Math.max(best, loopSize + component.length);
+    const total = loopSize + component.length;
+    if (total > best.total) {
+      best = { loopSize, reachable: component.length - loopSize, total };
+    }
   }
   return best;
 }
 
+export function scoreForPlayer(state: GameState, seat: SeatId): number {
+  return scoreBreakdownForPlayer(state, seat).total;
+}
+
 export function computeFinalScores(state: GameState): Record<SeatId, number> {
   return Object.fromEntries(state.seats.map((seat) => [seat, scoreForPlayer(state, seat)])) as Record<SeatId, number>;
+}
+
+export function computeScoreBreakdowns(state: GameState): Record<SeatId, ScoreBreakdown> {
+  return Object.fromEntries(state.seats.map((seat) => [seat, scoreBreakdownForPlayer(state, seat)])) as Record<
+    SeatId,
+    ScoreBreakdown
+  >;
 }
 
 /** Highest network score wins; ties broken by remaining gems; still tied is a shared victory. */

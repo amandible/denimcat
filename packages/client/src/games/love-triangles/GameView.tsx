@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { LinkId, SeatId } from '@denimcat/engine-love-triangles';
-import { LINKS } from '@denimcat/engine-love-triangles';
+import { LINKS, computeScoreBreakdowns } from '@denimcat/engine-love-triangles';
 import type { LoveTrianglesConnection } from './useLoveTrianglesActions';
 import { MapBoard } from './components/MapBoard';
 import { DisplayTrack } from './components/DisplayTrack';
@@ -70,6 +70,27 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
               {gameState.winner.length > 1 ? 'Shared victory: ' : 'Winner: '}
               {gameState.winner.map(seatLabel).join(', ')}
             </p>
+            {(() => {
+              const breakdowns = computeScoreBreakdowns(gameState);
+              const bySeat = [...gameState.seats].sort((a, b) => breakdowns[b].total - breakdowns[a].total);
+              return (
+                <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
+                  {bySeat.map((seat) => {
+                    const { loopSize, reachable, total } = breakdowns[seat];
+                    const isWinner = gameState.winner!.includes(seat);
+                    return (
+                      <li key={seat} style={{ padding: '4px 0', fontWeight: isWinner ? 'bold' : 'normal' }}>
+                        {seatLabel(seat)}: {total} pts
+                        <span style={{ color: 'var(--muted)', fontWeight: 'normal' }}>
+                          {' '}
+                          ({loopSize}-node loop{reachable > 0 ? ` + ${reachable} reachable` : ''})
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
           </div>
         )}
 
