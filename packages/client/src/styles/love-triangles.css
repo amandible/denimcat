@@ -1,0 +1,12 @@
+/* Love Triangles per-seat line colors — each player draws their network in
+   their own color, so unlike Mint Condition (color removed as unused) this
+   game genuinely needs four distinct, stable colors. Kept in its own file
+   so these can never collide with Hyper Bloom's --red/--blue (a different
+   kind of "color" — player identity vs. prize identity vs. this game's own
+   player identity, all deliberately separate variable namespaces). */
+:root {
+  --seat-1: #d64545;
+  --seat-2: #2b6cb0;
+  --seat-3: #2f8f4e;
+  --seat-4: #b5851f;
+}

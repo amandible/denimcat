@@ -18,4 +18,10 @@ export const GAMES: GameDescriptor[] = [
     namespace: '/mint-condition',
     tagline: 'A 2-4 player auction.',
   },
+  {
+    slug: 'love-triangles',
+    displayName: 'Love Triangles',
+    namespace: '/love-triangles',
+    tagline: 'TODO: Love Triangles description',
+  },
 ];
