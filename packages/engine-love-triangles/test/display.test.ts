@@ -34,11 +34,18 @@ describe('sweepUnplayable', () => {
       deck: ['I-J'],
     });
 
-    const next = sweepUnplayable(state);
+    const { state: next, events } = sweepUnplayable(state);
     expect(next.topRow).toEqual(['G-J', 'A-B', 'B-G']); // promoted, then refilled from the deck
     expect(next.bottomRow).toEqual(['I-J', 'H-I', 'H-J']);
     expect(next.deck).toEqual([]);
     expect(next.players.p1.gems).toBe(11);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('removed_unplayable');
+    expect(events[0].linkId).toBe('C-E');
+    expect(events[0].crossedLinks).toContain('A-H');
+    expect(events[0].paidTo).toEqual({ p1: 1 });
+    expect(events[0].state).toEqual(next); // the event's own snapshot matches the final state
   });
 
   it('restarts the scan from the top after each removal, cascading through multiple unplayable cards one at a time', () => {
@@ -52,7 +59,7 @@ describe('sweepUnplayable', () => {
       deck: [],
     });
 
-    const next = sweepUnplayable(state);
+    const { state: next, events } = sweepUnplayable(state);
     expect(next.topRow).toEqual(['G-J', 'H-I', 'B-G']);
     expect(next.bottomRow).toEqual([null, null, 'H-J']);
     expect(next.deck).toEqual([]);
@@ -60,6 +67,9 @@ describe('sweepUnplayable', () => {
     // lines it crosses — "even a player who owns multiple relevant lines
     // only gets one gem" — but two separate removals still each pay once).
     expect(next.players.p1.gems).toBe(12);
+
+    expect(events.map((e) => e.linkId)).toEqual(['C-E', 'F-G']); // in scan order, one at a time
+    expect(events.every((e) => e.paidTo.p1 === 1)).toBe(true);
   });
 
   it('does nothing when nothing in the display is unplayable', () => {
@@ -68,7 +78,8 @@ describe('sweepUnplayable', () => {
       topRow: ['A-B', 'B-G', 'G-J'],
       bottomRow: ['H-I', 'H-J', 'I-J'],
     });
-    const next = sweepUnplayable(state);
+    const { state: next, events } = sweepUnplayable(state);
     expect(next).toEqual(state);
+    expect(events).toEqual([]);
   });
 });

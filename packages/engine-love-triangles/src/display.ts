@@ -1,4 +1,5 @@
-import type { GameState, LinkId } from './types';
+import type { GameState, LinkId, SeatId } from './types';
+import type { RemovedUnplayableEvent } from './events';
 import { CROSSES } from './geometry';
 import { cloneState } from './state';
 
@@ -33,24 +34,30 @@ function allOwnedLinks(state: GameState): Set<LinkId> {
  * designer as the exact resolution order (it doesn't affect fairness since
  * replacement draws are random either way).
  */
-export function sweepUnplayable(state: GameState): GameState {
+export function sweepUnplayable(state: GameState): { state: GameState; events: RemovedUnplayableEvent[] } {
   let next = state;
+  const events: RemovedUnplayableEvent[] = [];
 
   while (true) {
     const owned = allOwnedLinks(next);
     const found = findFirstUnplayable(next, owned);
-    if (!found) return next;
+    if (!found) return { state: next, events };
 
     next = cloneState(next);
     const crossedLinks = new Set(CROSSES[found.id]);
+    const paidTo: Partial<Record<SeatId, number>> = {};
     for (const seat of next.seats) {
       const ownsACrossedLine = next.players[seat].ownedLinks.some((id) => crossedLinks.has(id));
-      if (ownsACrossedLine) next.players[seat].gems += 1;
+      if (ownsACrossedLine) {
+        next.players[seat].gems += 1;
+        paidTo[seat] = 1;
+      }
     }
     if (found.row === 'top') next.topRow[found.index] = null;
     else next.bottomRow[found.index] = null;
 
     next = refillDisplay(next);
+    events.push({ kind: 'removed_unplayable', linkId: found.id, crossedLinks: [...crossedLinks], paidTo, state: next });
   }
 }
 

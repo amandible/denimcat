@@ -4,7 +4,11 @@ import type { RoomStore } from './rooms/roomStore';
 export interface AfterMutationContext<TState, TSeat extends string> {
   state: TState;
   seatOrder: readonly TSeat[];
+  /** Whatever the acting mutation's own EngineResult.data carried — undefined if it carried none. */
+  data: unknown;
   emitToSeat: (seat: TSeat, event: string, payload: unknown) => void;
+  /** Broadcasts to every socket in the room (players and spectators alike) — for extra events that aren't per-viewer redacted. */
+  broadcastToRoom: (event: string, payload: unknown) => void;
 }
 
 /**

@@ -278,7 +278,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     room.gameState = result.state;
     room.lastActivityAt = Date.now();
     await this.persist(room);
-    this.broadcastState(room);
+    this.broadcastState(room, result.data);
     return { ok: true };
   }
 
@@ -286,7 +286,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return this.module.toView ? this.module.toView(room.gameState, viewer) : room.gameState;
   }
 
-  private broadcastState(room: LiveRoom<TState, TSeat>): void {
+  private broadcastState(room: LiveRoom<TState, TSeat>, data?: unknown): void {
     if (!this.module.toView) {
       this.nsp.to(room.code).emit('game_state', room.gameState);
     } else {
@@ -302,9 +302,13 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     this.module.afterMutation?.({
       state: room.gameState,
       seatOrder: room.seatOrder,
+      data,
       emitToSeat: (seat, event, payload) => {
         const s = room.seats[seat];
         if (s?.socketId) this.nsp.to(s.socketId).emit(event as any, payload as any);
+      },
+      broadcastToRoom: (event, payload) => {
+        this.nsp.to(room.code).emit(event as any, payload as any);
       },
     });
   }

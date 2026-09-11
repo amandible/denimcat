@@ -2,11 +2,21 @@ import 'dotenv/config';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import type { Color, GameState as HyperBloomState } from '@denimcat/engine-hyperbloom';
-import type { GameState as MintConditionState, MintConditionConfig, SeatId } from '@denimcat/engine-mint-condition';
+import type {
+  GameState as MintConditionState,
+  MintConditionConfig,
+  SeatId as MintConditionSeatId,
+} from '@denimcat/engine-mint-condition';
+import type {
+  GameState as LoveTrianglesState,
+  LoveTrianglesConfig,
+  SeatId as LoveTrianglesSeatId,
+} from '@denimcat/engine-love-triangles';
 import { RoomStore, attachSocketHandlers, createDefaultRoomRepository, ensureSchema } from '@denimcat/platform';
 import { createApp } from './app';
 import { hyperBloomModule } from './games/hyperbloom/module';
 import { mintConditionModule } from './games/mint-condition/module';
+import { loveTrianglesModule } from './games/love-triangles/module';
 
 async function main() {
   await ensureSchema();
@@ -25,14 +35,23 @@ async function main() {
   const hyperBloomStore = new RoomStore(hyperBloomModule, hyperBloomRepository, hyperBloomNsp);
   attachSocketHandlers(hyperBloomNsp, hyperBloomStore, hyperBloomModule);
 
-  const mintConditionRepository = createDefaultRoomRepository<MintConditionState, SeatId>();
+  const mintConditionRepository = createDefaultRoomRepository<MintConditionState, MintConditionSeatId>();
   const mintConditionNsp = io.of(mintConditionModule.namespace);
-  const mintConditionStore = new RoomStore<MintConditionState, MintConditionConfig, SeatId>(
+  const mintConditionStore = new RoomStore<MintConditionState, MintConditionConfig, MintConditionSeatId>(
     mintConditionModule,
     mintConditionRepository,
     mintConditionNsp,
   );
   attachSocketHandlers(mintConditionNsp, mintConditionStore, mintConditionModule);
+
+  const loveTrianglesRepository = createDefaultRoomRepository<LoveTrianglesState, LoveTrianglesSeatId>();
+  const loveTrianglesNsp = io.of(loveTrianglesModule.namespace);
+  const loveTrianglesStore = new RoomStore<LoveTrianglesState, LoveTrianglesConfig, LoveTrianglesSeatId>(
+    loveTrianglesModule,
+    loveTrianglesRepository,
+    loveTrianglesNsp,
+  );
+  attachSocketHandlers(loveTrianglesNsp, loveTrianglesStore, loveTrianglesModule);
 
   const port = Number(process.env.PORT ?? 4000);
   httpServer.listen(port, () => {

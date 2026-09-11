@@ -37,6 +37,34 @@ describe('buyLink', () => {
     expect(result.state.topRow).toEqual(['H-I', 'B-G', 'G-J']); // promoted
     expect(result.state.bottomRow).toEqual(['C-I', 'H-J', 'I-J']); // drawn
     expect(result.state.activeSeat).toBe('p2');
+
+    // No crossings triggered here, so just the purchase + its immediate refill.
+    expect(result.data?.events.map((e) => e.kind)).toEqual(['purchased', 'refilled']);
+    expect(result.data?.events[result.data.events.length - 1].state).toEqual(result.state);
+  });
+
+  it('logs an ordered event for the purchase and each cascade removal it triggers', () => {
+    // A-H crosses C-E (hand-verified in geometry.test.ts). Buying D-F (which
+    // crosses nothing itself) shouldn't disturb anything on its own; but
+    // having A-H already owned means C-E in the display is unplayable from
+    // the start and gets swept away as part of this same purchase.
+    const state = makeState({
+      seats: ['p1', 'p2'],
+      activeSeat: 'p1',
+      players: { p1: { gems: 10, ownedLinks: ['A-H'] } },
+      topRow: ['D-F', 'C-E', 'B-G'],
+      bottomRow: ['G-J', 'H-I', 'H-J'],
+      deck: [],
+    });
+
+    const result = buyLink(state, 'p1', 'D-F');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const kinds = result.data?.events.map((e) => e.kind);
+    expect(kinds).toEqual(['purchased', 'refilled', 'removed_unplayable']);
+    const removal = result.data?.events[2];
+    expect(removal?.kind === 'removed_unplayable' && removal.linkId).toBe('C-E');
   });
 
   it('pays presence surcharges to the bank and to opponents as part of the same purchase', () => {

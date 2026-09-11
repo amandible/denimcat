@@ -11,3 +11,4 @@ export {
 } from './scoring';
 export { CROSSES } from './geometry';
 export { NODES, LINKS, linkId, type LinkDef } from './maps/map1';
+export type { LoveTrianglesEvent, PurchasedEvent, RefilledEvent, RemovedUnplayableEvent } from './events';
