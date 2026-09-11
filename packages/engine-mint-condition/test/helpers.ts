@@ -35,6 +35,7 @@ export function makeState(
     auction?: Partial<AuctionState>;
     winner?: SeatId[] | null;
     unlockedUpperSlots?: number[];
+    discardPile?: PrizeCard[];
   } = {},
 ): GameState {
   const seats = overrides.seats ?? ['p1', 'p2'];
@@ -52,5 +53,6 @@ export function makeState(
     auction: makeAuction({ turnOrder: seats, activeSeat: seats[0], openerSeat: seats[0], ...overrides.auction }),
     winner: overrides.winner ?? null,
     unlockedUpperSlots: overrides.unlockedUpperSlots ?? [4, 5],
+    discardPile: overrides.discardPile ?? [],
   };
 }

@@ -32,14 +32,33 @@ describe('shiftDisplay', () => {
     expect(next.priceSlots[0].prizes).toEqual([]);
     expect(next.priceSlots[1].prizes).toEqual([prize('a', 'red', 1)]);
     expect(next.priceSlots[3].prizes).toEqual([prize('b', 'blue', 2)]);
-    // The prize that was already at the priciest slot is permanently removed.
+    // The prize that was already at the priciest slot is permanently removed...
     expect(next.priceSlots[5].prizes).toEqual([]);
+    // ...but not vanished — it's visible in the discard pile.
+    expect(next.discardPile).toEqual([prize('c', 'yellow', 5)]);
   });
 
   it('leaves already-empty slots empty', () => {
     const state = makeState();
     const next = shiftDisplay(state);
     for (const slot of next.priceSlots) expect(slot.prizes).toEqual([]);
+    expect(next.discardPile).toEqual([]);
+  });
+
+  it('accumulates discarded prizes across multiple shifts rather than replacing the pile', () => {
+    const state = makeState({
+      discardPile: [prize('old', 'blue', 2)],
+      priceSlots: [
+        { price: 1, prizes: [] },
+        { price: 2, prizes: [] },
+        { price: 3, prizes: [] },
+        { price: 4, prizes: [] },
+        { price: 5, prizes: [] },
+        { price: 6, prizes: [prize('c', 'yellow', 5)] },
+      ],
+    });
+    const next = shiftDisplay(state);
+    expect(next.discardPile).toEqual([prize('old', 'blue', 2), prize('c', 'yellow', 5)]);
   });
 
   it('unlocks the top two slots the first time a prize naturally drifts into each', () => {

@@ -43,6 +43,8 @@ export interface MintConditionStateView {
   winner: SeatId[] | null;
   /** Indices of the top two slots that are currently legal targets for manual placement — see GameState.unlockedUpperSlots. */
   unlockedUpperSlots: number[];
+  /** Prizes permanently removed from the game after pricing up too high — public. */
+  discardPile: PrizeCard[];
 }
 
 /**
@@ -83,6 +85,7 @@ export function toView(state: GameState, viewer: SeatId | 'spectator'): MintCond
     },
     winner: state.winner ? [...state.winner] : null,
     unlockedUpperSlots: [...state.unlockedUpperSlots],
+    discardPile: state.discardPile.map((p) => ({ ...p })),
   };
 }
 

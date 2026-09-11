@@ -173,5 +173,6 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     auction: startAuction(seats, openerSeat),
     winner: null,
     unlockedUpperSlots: [],
+    discardPile: [],
   };
 }

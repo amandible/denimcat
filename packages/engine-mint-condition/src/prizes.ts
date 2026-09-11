@@ -21,7 +21,10 @@ export function shiftDisplay(state: GameState): GameState {
   const original = next.priceSlots.map((slot) => slot.prizes);
   const upperIndices = [lastIndex - 1, lastIndex];
 
-  next.priceSlots[lastIndex].prizes = []; // discarded outright
+  if (next.priceSlots[lastIndex].prizes.length > 0) {
+    next.discardPile = [...next.discardPile, ...next.priceSlots[lastIndex].prizes];
+  }
+  next.priceSlots[lastIndex].prizes = []; // permanently removed from the game
   for (let i = lastIndex - 1; i >= 0; i--) {
     next.priceSlots[i + 1].prizes = original[i];
     next.priceSlots[i].prizes = [];

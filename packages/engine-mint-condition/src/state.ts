@@ -66,5 +66,6 @@ export function cloneState(state: GameState): GameState {
     auction: cloneAuction(state.auction),
     winner: state.winner ? [...state.winner] : null,
     unlockedUpperSlots: [...state.unlockedUpperSlots],
+    discardPile: state.discardPile.map((p) => ({ ...p })),
   };
 }

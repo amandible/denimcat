@@ -63,6 +63,8 @@ export interface GameState {
   auction: AuctionState;
   /** Multiple seats on a tie. */
   winner: SeatId[] | null;
+  /** Prizes permanently removed from the game after going unbought at the priciest slot — public, so players can see what's gone. */
+  discardPile: PrizeCard[];
   /**
    * Indices of the top two price slots that have become legal targets for
    * manual placement (via placeNewPrize) because a prize has naturally

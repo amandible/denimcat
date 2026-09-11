@@ -15,6 +15,16 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   if (!gameState || !you) return null;
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
+  // Whoever needs to act next: the active bidder during a live auction, or
+  // the winner during the two post-auction phases (choosing/placing a
+  // prize) — the game is just as much "waiting on someone" there as it is
+  // mid-auction, even though nobody's placing a bid.
+  const pendingSeat: SeatId | null =
+    gameState.phase === 'auction-active'
+      ? gameState.auction.activeSeat
+      : gameState.phase === 'awaiting-prize-choice' || gameState.phase === 'awaiting-new-prize-placement'
+        ? gameState.auction.winnerSeat
+        : null;
   const isMyTurn = !!mySeat && gameState.phase === 'auction-active' && gameState.auction.activeSeat === mySeat;
   const isWinner = !!mySeat && gameState.auction.winnerSeat === mySeat;
   const myHand = mySeat ? gameState.players[mySeat].hand ?? [] : [];
@@ -33,8 +43,8 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
       <div className="panel" style={{ flex: '1 1 260px', height: 'fit-content' }}>
         <p style={{ marginTop: 0 }}>
           You are <strong>{you.role === 'spectator' ? 'a spectator' : seatLabel(mySeat as SeatId)}</strong>
-          {mySeat && gameState.phase === 'auction-active' && (
-            <> — {isMyTurn ? "it's your turn" : `waiting on ${seatLabel(gameState.auction.activeSeat)}`}</>
+          {mySeat && pendingSeat && (
+            <> — {pendingSeat === mySeat ? "it's your turn" : `waiting on ${seatLabel(pendingSeat)}`}</>
           )}
         </p>
 
