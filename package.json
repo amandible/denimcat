@@ -8,6 +8,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:engine-hyperbloom": "npm run test -w @denimcat/engine-hyperbloom",
     "test:engine-mint-condition": "npm run test -w @denimcat/engine-mint-condition",
+    "test:engine-love-triangles": "npm run test -w @denimcat/engine-love-triangles",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {
