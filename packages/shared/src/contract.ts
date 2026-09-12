@@ -24,11 +24,17 @@ export type PeekRoomResult<TSeat extends string> =
  * The room-lifecycle events every game shares verbatim: creating, joining,
  * reconnecting to, and leaving a room. A game's own contract extends these
  * with its game-specific verb events (moves, bids, whatever). `TConfig` is
- * whatever `create_room` needs to size the room (e.g. a player count) —
- * games with no configurable options just use `undefined`.
+ * whatever a game's `GameModule.parseConfig`/`createInitialState` end up
+ * using once validated (e.g. a player count, or Hyper Bloom's
+ * `{ specialCircles }`) — games with no configurable options just use
+ * `undefined`. `create_room`'s payload itself stays `unknown`, not
+ * `TConfig`: `parseConfig(raw: unknown)` is the one place that validates
+ * and shapes it, so a client is free to send any room-setup answers raw
+ * (e.g. a chosen count rather than an already-resolved list) rather than
+ * being required to construct a pre-validated `TConfig` itself.
  */
 export interface RoomLifecycleClientToServerEvents<TSeat extends string, TConfig, TView> {
-  create_room: (config: TConfig, cb: (res: { ok: true; roomCode: string } | { ok: false; error: EngineError }) => void) => void;
+  create_room: (config: unknown, cb: (res: { ok: true; roomCode: string } | { ok: false; error: EngineError }) => void) => void;
   /** Read-only: lets a client learn a room's actual seat list before choosing a role — binds nothing, joins no seat. */
   peek_room: (payload: { roomCode: string }, cb: (res: PeekRoomResult<TSeat>) => void) => void;
   join_room: (payload: { roomCode: string; role: Role<TSeat> }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
