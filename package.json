@@ -1,0 +1,18 @@
+{
+  "name": "denimcat",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "test:engine-hyperbloom": "npm run test -w @denimcat/engine-hyperbloom",
+    "test:engine-mint-condition": "npm run test -w @denimcat/engine-mint-condition",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "@types/node": "^22.13.1"
+  }
+}

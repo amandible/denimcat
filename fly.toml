@@ -1,0 +1,24 @@
+# Fly.io config for the denimcat socket server (hosts Hyper Bloom and, once
+# wired up, Mint Condition — both games share this one process).
+# Run `fly launch --no-deploy` once from the repo root to create the app and
+# adjust `app`/`primary_region` below, then `fly deploy`.
+#
+# Set secrets before the first deploy (these must never live in this file):
+#   fly secrets set DATABASE_URL="<your Neon connection string>"
+#   fly secrets set CLIENT_ORIGIN="https://<your-vercel-app>.vercel.app"
+
+app = "denimcat-server"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
