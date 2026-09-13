@@ -18,6 +18,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages packages
+COPY private-games private-games
 
 RUN npm ci
 

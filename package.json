@@ -2,7 +2,8 @@
   "name": "denimcat",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "private-games/hyperbloom/engine-hyperbloom"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",

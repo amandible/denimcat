@@ -14,7 +14,7 @@ import type {
 } from '@denimcat/engine-love-triangles';
 import { RoomStore, attachSocketHandlers, createDefaultRoomRepository, ensureSchema } from '@denimcat/platform';
 import { createApp } from './app';
-import { hyperBloomModule } from './games/hyperbloom/module';
+import { hyperBloomModule } from '../../../private-games/hyperbloom/server-hyperbloom/module';
 import { mintConditionModule } from './games/mint-condition/module';
 import { loveTrianglesModule } from './games/love-triangles/module';
 
