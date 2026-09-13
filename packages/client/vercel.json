@@ -1,3 +1,4 @@
 {
+  "installCommand": "if [ -n \"$HYPERBLOOM_TOKEN\" ]; then git config --global url.\"https://${HYPERBLOOM_TOKEN}@github.com/\".insteadOf \"https://github.com/\"; fi; (cd ../.. && git submodule update --init --recursive) && npm install",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
