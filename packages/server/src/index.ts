@@ -12,11 +12,13 @@ import type {
   LoveTrianglesConfig,
   SeatId as LoveTrianglesSeatId,
 } from '@denimcat/engine-love-triangles';
+import type { Color as TashKalarSeatId, GameState as TashKalarState, TashKalarConfig } from '@denimcat/engine-tashkalar';
 import { RoomStore, attachSocketHandlers, createDefaultRoomRepository, ensureSchema } from '@denimcat/platform';
 import { createApp } from './app';
 import { hyperBloomModule } from '../../../private-games/other-games/server-hyperbloom/module';
 import { mintConditionModule } from './games/mint-condition/module';
 import { loveTrianglesModule } from './games/love-triangles/module';
+import { tashKalarModule } from '../../../private-games/other-games/server-tashkalar/module';
 
 async function main() {
   await ensureSchema();
@@ -52,6 +54,15 @@ async function main() {
     loveTrianglesNsp,
   );
   attachSocketHandlers(loveTrianglesNsp, loveTrianglesStore, loveTrianglesModule);
+
+  const tashKalarRepository = createDefaultRoomRepository<TashKalarState, TashKalarSeatId>();
+  const tashKalarNsp = io.of(tashKalarModule.namespace);
+  const tashKalarStore = new RoomStore<TashKalarState, TashKalarConfig, TashKalarSeatId>(
+    tashKalarModule,
+    tashKalarRepository,
+    tashKalarNsp,
+  );
+  attachSocketHandlers(tashKalarNsp, tashKalarStore, tashKalarModule);
 
   const port = Number(process.env.PORT ?? 4000);
   httpServer.listen(port, () => {

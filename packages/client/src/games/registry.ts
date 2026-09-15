@@ -24,4 +24,10 @@ export const GAMES: GameDescriptor[] = [
     namespace: '/love-triangles',
     tagline: 'TODO: Love Triangles description',
   },
+  {
+    slug: 'tashkalar',
+    displayName: 'Tash-Kalar',
+    namespace: '/tashkalar',
+    tagline: 'TODO: Tash-Kalar description',
+  },
 ];
