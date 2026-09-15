@@ -3,6 +3,13 @@
   "compilerOptions": {
     "outDir": "dist"
   },
-  "include": ["src", "../../private-games/hyperbloom/server-hyperbloom"],
-  "exclude": ["../../private-games/hyperbloom/server-hyperbloom/test"]
+  "include": [
+    "src",
+    "../../private-games/other-games/server-hyperbloom",
+    "../../private-games/other-games/server-tashkalar"
+  ],
+  "exclude": [
+    "../../private-games/other-games/server-hyperbloom/test",
+    "../../private-games/other-games/server-tashkalar/test"
+  ]
 }

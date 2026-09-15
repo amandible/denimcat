@@ -6,5 +6,9 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "../../private-games/hyperbloom/client-hyperbloom"]
+  "include": [
+    "src",
+    "../../private-games/other-games/client-hyperbloom",
+    "../../private-games/other-games/client-tashkalar"
+  ]
 }

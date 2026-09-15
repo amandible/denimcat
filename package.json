@@ -3,13 +3,15 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "private-games/hyperbloom/engine-hyperbloom"
+    "private-games/other-games/engine-hyperbloom",
+    "private-games/other-games/engine-tashkalar"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "test:engine-hyperbloom": "npm run test -w @denimcat/engine-hyperbloom",
     "test:engine-mint-condition": "npm run test -w @denimcat/engine-mint-condition",
     "test:engine-love-triangles": "npm run test -w @denimcat/engine-love-triangles",
+    "test:engine-tashkalar": "npm run test -w @denimcat/engine-tashkalar",
     "build": "npm run build --workspaces --if-present"
   },
   "devDependencies": {

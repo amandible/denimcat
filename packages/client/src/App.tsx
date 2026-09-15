@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { HomeView } from './views/HomeView';
-import { HyperBloomHomeView } from '../../../private-games/hyperbloom/client-hyperbloom/HomeView';
+import { HyperBloomHomeView } from '../../../private-games/other-games/client-hyperbloom/HomeView';
 import { MintConditionHomeView } from './games/mint-condition/HomeView';
 import { LoveTrianglesHomeView } from './games/love-triangles/HomeView';
-import { HyperBloomRoom } from '../../../private-games/hyperbloom/client-hyperbloom/HyperBloomRoom';
+import { HyperBloomRoom } from '../../../private-games/other-games/client-hyperbloom/HyperBloomRoom';
 import { MintConditionRoom } from './games/mint-condition/MintConditionRoom';
 import { LoveTrianglesRoom } from './games/love-triangles/LoveTrianglesRoom';
 
