@@ -22,12 +22,12 @@ export const GAMES: GameDescriptor[] = [
     slug: 'love-triangles',
     displayName: 'Love Triangles',
     namespace: '/love-triangles',
-    tagline: 'TODO: Love Triangles description',
+    tagline: 'Playing gems to claim lines.',
   },
   {
     slug: 'tashkalar',
     displayName: 'Tash-Kalar',
     namespace: '/tashkalar',
-    tagline: 'TODO: Tash-Kalar description',
+    tagline: 'Testing fan factions',
   },
 ];
