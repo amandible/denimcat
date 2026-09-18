@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { clearSeat, loadSeat, saveSeat } from './seatToken';
+import { clearSeat, clearSeatForRole, loadSeat, loadSeatForRole, saveSeat, saveSeatForRole } from './seatToken';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:4000';
 
@@ -37,7 +37,7 @@ export function useRoomConnection<TView>(
   gameSlug: string,
   namespace: string,
   roomCode: string,
-  options: { extraListeners?: Record<string, (payload: any) => void> } = {},
+  options: { extraListeners?: Record<string, (payload: any) => void>; role?: string } = {},
 ): RoomConnection<TView> {
   const socketRef = useRef<Socket | null>(null);
   const [status, setStatus] = useState<Status>('connecting');
@@ -47,12 +47,36 @@ export function useRoomConnection<TView>(
   const [lastError, setLastError] = useState<string | null>(null);
   const extraListenersRef = useRef(options.extraListeners);
   extraListenersRef.current = options.extraListeners;
+  // A fixed role, used only by hotseat mode (one tab, N seats): this
+  // connection is always THIS one seat, auto-joined/reconnected with no
+  // manual role-pick step, and persisted under its own role-scoped storage
+  // key so it doesn't collide with this room's other seats on refresh.
+  const fixedRole = options.role;
 
   useEffect(() => {
     const socket = io(`${SERVER_URL}${namespace}`, { transports: ['websocket'] });
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      if (fixedRole !== undefined) {
+        const stored = loadSeatForRole(gameSlug, roomCode, fixedRole);
+        if (stored) {
+          socket.emit('reconnect_room', { roomCode, role: stored.role, seatToken: stored.seatToken }, (res: any) => {
+            if (res.ok) {
+              setGameState(res.gameState);
+              setYou(res.you);
+              setStatus('in-room');
+              setLastError(null);
+              return;
+            }
+            clearSeatForRole(gameSlug, roomCode, fixedRole);
+            joinFixedRole(socket, fixedRole);
+          });
+          return;
+        }
+        joinFixedRole(socket, fixedRole);
+        return;
+      }
       const stored = loadSeat(gameSlug, roomCode);
       if (!stored) {
         // Learn the room's actual seat list before showing role-pick
@@ -79,6 +103,20 @@ export function useRoomConnection<TView>(
       });
     });
 
+    function joinFixedRole(socket: Socket, role: string) {
+      socket.emit('join_room', { roomCode, role }, (res: any) => {
+        if (!res.ok) {
+          setLastError(res.error.message);
+          return;
+        }
+        setGameState(res.gameState);
+        setYou(res.you);
+        setStatus('in-room');
+        setLastError(null);
+        if (res.seatToken) saveSeatForRole(gameSlug, roomCode, role, { role, seatToken: res.seatToken });
+      });
+    }
+
     socket.on('game_state', setGameState as any);
     socket.on('room_update', setRoomInfo as any);
     socket.on('error', (err: any) => setLastError(err.message));
@@ -92,7 +130,7 @@ export function useRoomConnection<TView>(
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameSlug, namespace, roomCode]);
+  }, [gameSlug, namespace, roomCode, fixedRole]);
 
   const joinAs = useCallback(
     (role: string) => {
@@ -115,11 +153,12 @@ export function useRoomConnection<TView>(
 
   const leaveSeat = useCallback(() => {
     socketRef.current?.emit('leave_seat', { roomCode }, () => {
-      clearSeat(gameSlug, roomCode);
+      if (fixedRole !== undefined) clearSeatForRole(gameSlug, roomCode, fixedRole);
+      else clearSeat(gameSlug, roomCode);
       setYou(null);
       setStatus('picking-role');
     });
-  }, [gameSlug, roomCode]);
+  }, [gameSlug, roomCode, fixedRole]);
 
   const sendAction = useCallback(
     (event: string, payload: Record<string, unknown> = {}) => {
