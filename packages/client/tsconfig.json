@@ -8,6 +8,7 @@
   },
   "include": [
     "src",
+    "middleware.ts",
     "../../private-games/other-games/client-hyperbloom",
     "../../private-games/other-games/client-tashkalar"
   ]
