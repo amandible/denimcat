@@ -28,8 +28,14 @@ async function main() {
   // Untyped at the top level deliberately: this one Server hosts multiple
   // games, each with its own event contract on its own namespace (typed
   // strictly on the client side and within each game's own handler files).
+  // CLIENT_ORIGIN may be a single origin or a comma-separated list (e.g. a
+  // vercel.app URL alongside a custom domain aliased to the same
+  // deployment) — Socket.io accepts an array of exact-match origins here.
+  const clientOrigins = process.env.CLIENT_ORIGIN?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   const io = new Server(httpServer, {
-    cors: { origin: process.env.CLIENT_ORIGIN ?? '*' },
+    cors: { origin: clientOrigins && clientOrigins.length > 0 ? clientOrigins : '*' },
   });
 
   const hyperBloomRepository = createDefaultRoomRepository<HyperBloomState, Color>();
