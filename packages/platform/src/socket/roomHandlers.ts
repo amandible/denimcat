@@ -43,15 +43,20 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       });
   });
 
-  socket.on('join_room', (payload: { roomCode?: unknown; role?: unknown }, cb: (res: unknown) => void) => {
+  socket.on('join_room', (payload: { roomCode?: unknown; role?: unknown; email?: unknown }, cb: (res: unknown) => void) => {
     if (!payload || !isNonEmptyString(payload.roomCode) || !isNonEmptyString(payload.role)) {
+      cb({ ok: false, error: INVALID_PAYLOAD });
+      return;
+    }
+    if (payload.email !== undefined && !isNonEmptyString(payload.email)) {
       cb({ ok: false, error: INVALID_PAYLOAD });
       return;
     }
     const roomCode = payload.roomCode;
     const role = payload.role as TSeat | 'spectator';
+    const email = payload.email as string | undefined;
     store
-      .joinRoom(roomCode, role, socket.id)
+      .joinRoom(roomCode, role, socket.id, email)
       .then(async (result) => {
         if (result.ok) {
           socket.join(roomCode);

@@ -4,6 +4,26 @@ import { clearSeat, clearSeatForRole, loadSeat, loadSeatForRole, saveSeat, saveS
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:4000';
 
+/**
+ * Reads `?seat=&token=` (a turn-notification email's reconnect link — see
+ * RoomStore.notifyTurnIfOffline) and strips them from the visible URL right
+ * away, so the seat token doesn't linger in the address bar/history any
+ * longer than the one reconnect attempt needs it for. Returns null (and
+ * touches nothing) when either param is absent — the normal case for every
+ * other page load.
+ */
+function consumeReconnectLinkParams(): { role: string; seatToken: string } | null {
+  const params = new URLSearchParams(window.location.search);
+  const role = params.get('seat');
+  const seatToken = params.get('token');
+  if (!role || !seatToken) return null;
+  params.delete('seat');
+  params.delete('token');
+  const newSearch = params.toString();
+  window.history.replaceState(null, '', window.location.pathname + (newSearch ? `?${newSearch}` : '') + window.location.hash);
+  return { role, seatToken };
+}
+
 export type Status = 'connecting' | 'picking-role' | 'in-room';
 
 export interface RoomInfo {
@@ -20,7 +40,7 @@ export interface RoomConnection<TView> {
   gameState: TView | null;
   roomInfo: RoomInfo | null;
   lastError: string | null;
-  joinAs: (role: string) => void;
+  joinAs: (role: string, email?: string) => void;
   leaveSeat: () => void;
   /** Generic action escape hatch: emits `event` with `{roomCode, ...payload}` and just surfaces any error. */
   sendAction: (event: string, payload?: Record<string, unknown>) => void;
@@ -77,7 +97,11 @@ export function useRoomConnection<TView>(
         joinFixedRole(socket, fixedRole);
         return;
       }
-      const stored = loadSeat(gameSlug, roomCode);
+      // A turn-notification email's reconnect link (?seat=&token=) takes
+      // priority over anything already in localStorage — e.g. opening it on
+      // a different device/browser than the one that originally joined.
+      const linked = consumeReconnectLinkParams();
+      const stored = linked ?? loadSeat(gameSlug, roomCode);
       if (!stored) {
         // Learn the room's actual seat list before showing role-pick
         // buttons — a static per-game list would offer seats a specific
@@ -95,6 +119,9 @@ export function useRoomConnection<TView>(
           setYou(res.you);
           setStatus('in-room');
           setLastError(null);
+          // Persist regardless of source, so a link-based reconnect also
+          // works normally (no link needed) on future visits from this browser.
+          saveSeat(gameSlug, roomCode, { role: stored.role, seatToken: stored.seatToken });
         } else {
           clearSeat(gameSlug, roomCode);
           setLastError(res.error.message);
@@ -133,8 +160,8 @@ export function useRoomConnection<TView>(
   }, [gameSlug, namespace, roomCode, fixedRole]);
 
   const joinAs = useCallback(
-    (role: string) => {
-      socketRef.current?.emit('join_room', { roomCode, role }, (res: any) => {
+    (role: string, email?: string) => {
+      socketRef.current?.emit('join_room', { roomCode, role, email }, (res: any) => {
         if (!res.ok) {
           setLastError(res.error.message);
           return;

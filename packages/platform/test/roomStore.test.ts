@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Namespace } from 'socket.io';
+import { ok } from '@denimcat/shared';
 import { RoomStore } from '../src/rooms/roomStore';
-import { InMemoryRoomRepository } from '../src/rooms/roomRepository';
+import { InMemoryRoomRepository, type PersistedSeat } from '../src/rooms/roomRepository';
+import type { EmailSender } from '../src/email';
 import type { GameModule } from '../src/gameModule';
 
 type TestSeat = 'p1' | 'p2';
@@ -73,4 +75,142 @@ describe('RoomStore concurrent hydration', () => {
       store.stop();
     },
   );
+});
+
+type TurnSeat = 'p1' | 'p2';
+type TurnState = { turn: TurnSeat | null };
+
+function makeTurnModule(): GameModule<TurnState, undefined, TurnSeat> {
+  return {
+    id: 'turn-game',
+    displayName: 'Turn Game',
+    namespace: '/turn',
+    minSeats: 2,
+    maxSeats: 2,
+    parseConfig: () => undefined,
+    seatsForConfig: () => ['p1', 'p2'],
+    createInitialState: () => ({ turn: 'p1' }),
+    registerHandlers: () => {},
+    getActiveSeat: (state) => state.turn,
+  };
+}
+
+function fakeEmailSender(): EmailSender & { calls: { to: string; subject: string; text: string }[] } {
+  const calls: { to: string; subject: string; text: string }[] = [];
+  return {
+    calls,
+    async send(to, subject, text) {
+      calls.push({ to, subject, text });
+    },
+  };
+}
+
+async function seedTurnRepo(code: string, seats: Partial<Record<TurnSeat, PersistedSeat>>): Promise<InMemoryRoomRepository<TurnState, TurnSeat>> {
+  const repo = new InMemoryRoomRepository<TurnState, TurnSeat>();
+  await repo.save({
+    code,
+    gameId: 'turn-game',
+    gameState: { turn: 'p1' },
+    seatOrder: ['p1', 'p2'],
+    seats,
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+  });
+  return repo;
+}
+
+describe('RoomStore async-play turn notifications', () => {
+  it('emails the newly-active seat when it is offline and has an email on file', async () => {
+    const repo = await seedTurnRepo('AAAA', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+    });
+    const sender = fakeEmailSender();
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+    await store.reconnectRoom('AAAA', 'p1', 'tok-1', 'socket-1'); // p1 connects; p2 never does — offline throughout
+    const result = await store.applyAction('AAAA', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+    expect(result.ok).toBe(true);
+
+    expect(sender.calls).toHaveLength(1);
+    expect(sender.calls[0].to).toBe('p2@example.com');
+    expect(sender.calls[0].subject).toContain('Turn Game');
+
+    store.stop();
+  });
+
+  it('does not email when the active seat is unchanged (e.g. a bonus turn)', async () => {
+    const repo = await seedTurnRepo('BBBB', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+    });
+    const sender = fakeEmailSender();
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+    await store.reconnectRoom('BBBB', 'p1', 'tok-1', 'socket-1');
+    await store.applyAction('BBBB', 'socket-1', () => ok<TurnState>({ turn: 'p1' })); // still p1's turn
+
+    expect(sender.calls).toHaveLength(0);
+    store.stop();
+  });
+
+  it('does not email a seat that is still connected', async () => {
+    const repo = await seedTurnRepo('CCCC', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+    });
+    const sender = fakeEmailSender();
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+    await store.reconnectRoom('CCCC', 'p1', 'tok-1', 'socket-1');
+    await store.reconnectRoom('CCCC', 'p2', 'tok-2', 'socket-2'); // p2 IS connected
+    await store.applyAction('CCCC', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+
+    expect(sender.calls).toHaveLength(0);
+    store.stop();
+  });
+
+  it('does not email a seat with no email on file', async () => {
+    const repo = await seedTurnRepo('DDDD', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2' }, // no email
+    });
+    const sender = fakeEmailSender();
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+    await store.reconnectRoom('DDDD', 'p1', 'tok-1', 'socket-1');
+    await store.applyAction('DDDD', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+
+    expect(sender.calls).toHaveLength(0);
+    store.stop();
+  });
+
+  it('does not email once the game has ended (getActiveSeat returns null)', async () => {
+    const repo = await seedTurnRepo('EEEE', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+    });
+    const sender = fakeEmailSender();
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+    await store.reconnectRoom('EEEE', 'p1', 'tok-1', 'socket-1');
+    await store.applyAction('EEEE', 'socket-1', () => ok<TurnState>({ turn: null }));
+
+    expect(sender.calls).toHaveLength(0);
+    store.stop();
+  });
+
+  it('a RoomStore built with no emailSender option defaults to a noop (never throws)', async () => {
+    const repo = await seedTurnRepo('FFFF', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+    });
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace()); // no options at all
+
+    await store.reconnectRoom('FFFF', 'p1', 'tok-1', 'socket-1');
+    const result = await store.applyAction('FFFF', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+    expect(result.ok).toBe(true);
+
+    store.stop();
+  });
 });

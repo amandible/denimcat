@@ -2,6 +2,8 @@ import { getDb } from '../db/client';
 
 export interface PersistedSeat {
   seatToken: string;
+  /** Optional, supplied at join time — used for async-play turn notifications (see RoomStore.applyAction). */
+  email?: string;
 }
 
 /**

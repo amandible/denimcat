@@ -47,4 +47,7 @@ export const loveTrianglesModule: GameModule<GameState, LoveTrianglesConfig, Sea
     const events = (data as { events?: LoveTrianglesEvent[] } | undefined)?.events;
     if (events?.length) broadcastToRoom('love_triangles_events', events);
   },
+
+  getActiveSeat: (state) => (state.phase === 'playing' ? state.activeSeat : null),
+  roomUrlPath: (code) => `/love-triangles/room/${code}`,
 };

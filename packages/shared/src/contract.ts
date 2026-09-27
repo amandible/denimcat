@@ -37,7 +37,8 @@ export interface RoomLifecycleClientToServerEvents<TSeat extends string, TConfig
   create_room: (config: unknown, cb: (res: { ok: true; roomCode: string } | { ok: false; error: EngineError }) => void) => void;
   /** Read-only: lets a client learn a room's actual seat list before choosing a role — binds nothing, joins no seat. */
   peek_room: (payload: { roomCode: string }, cb: (res: PeekRoomResult<TSeat>) => void) => void;
-  join_room: (payload: { roomCode: string; role: Role<TSeat> }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
+  /** `email` is optional and only meaningful for a real seat (ignored for 'spectator') — see RoomStore's async-play turn notifications. */
+  join_room: (payload: { roomCode: string; role: Role<TSeat>; email?: string }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
   reconnect_room: (
     payload: { roomCode: string; role: TSeat; seatToken: string },
     cb: (res: JoinResult<TSeat, TView>) => void,

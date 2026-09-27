@@ -34,4 +34,13 @@ export interface GameModule<TState, TConfig, TSeat extends string> {
   toView?(state: TState, viewer: TSeat | 'spectator'): unknown;
   /** Runs after every successful mutation; use `emitToSeat` to push extra targeted events (e.g. legal-move hints). */
   afterMutation?(ctx: AfterMutationContext<TState, TSeat>): void;
+  /**
+   * Whose move it is right now, or null when there's no meaningful "turn"
+   * to wait on (game over, between phases, etc.). Optional — a game that
+   * omits this just never triggers async-play turn notifications (see
+   * RoomStore.applyAction, which diffs this before/after each mutation).
+   */
+  getActiveSeat?(state: TState): TSeat | null;
+  /** Builds this game's own room URL path (e.g. `/tashkalar/room/ABCD`) for a turn-notification email's reconnect link. Omit to send notifications without a clickable link. */
+  roomUrlPath?(code: string): string;
 }

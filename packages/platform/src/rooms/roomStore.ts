@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import type { Namespace } from 'socket.io';
 import type { ActionResult, EngineResult, JoinResult, Role, RoomInfo } from '@denimcat/shared';
+import { createNoopEmailSender, type EmailSender } from '../email';
 import type { GameModule } from '../gameModule';
 import { generateRoomCode } from './roomCode';
 import type { PersistedRoom, RoomRepository } from './roomRepository';
@@ -13,6 +14,8 @@ interface LiveSeat {
   seatToken: string;
   socketId: string | null;
   disconnectedAt: number | null;
+  /** Optional, supplied at join time — see RoomStoreOptions.emailSender's doc comment for what it's used for. */
+  email?: string;
 }
 
 interface LiveRoom<TState, TSeat extends string> {
@@ -31,6 +34,16 @@ export interface RoomStoreOptions {
   graceMs?: number;
   idleSweepMs?: number;
   idleTimeoutMs?: number;
+  /**
+   * Async play: sends a "it's your turn" email when GameModule.getActiveSeat
+   * hands the turn to a seat that has no live socket connected right now
+   * (see applyAction's notifyTurnIfOffline). Defaults to a noop sender, so
+   * existing callers/tests that construct a RoomStore directly don't need
+   * to change anything.
+   */
+  emailSender?: EmailSender;
+  /** Canonical base URL (e.g. `https://denimcat.ancepp-glos.com`) used only to build a turn-notification email's reconnect link — see GameModule.roomUrlPath. Omit to send notifications without a clickable link. */
+  appBaseUrl?: string;
 }
 
 /**
@@ -58,6 +71,8 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   private sweepTimer: NodeJS.Timeout;
   private graceMs: number;
   private idleTimeoutMs: number;
+  private emailSender: EmailSender;
+  private appBaseUrl?: string;
 
   constructor(
     private module: GameModule<TState, TConfig, TSeat>,
@@ -67,6 +82,8 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   ) {
     this.graceMs = options.graceMs ?? RECONNECT_GRACE_MS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_ROOM_TIMEOUT_MS;
+    this.emailSender = options.emailSender ?? createNoopEmailSender();
+    this.appBaseUrl = options.appBaseUrl;
     this.sweepTimer = setInterval(
       () => this.sweepIdleRooms().catch((error) => console.error(`[roomStore:${this.module.id}] idle sweep failed:`, error)),
       options.idleSweepMs ?? IDLE_SWEEP_INTERVAL_MS,
@@ -129,7 +146,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     for (const seat of persisted.seatOrder) {
       const persistedSeat = persisted.seats[seat];
       if (!persistedSeat) continue;
-      seats[seat] = { seatToken: persistedSeat.seatToken, socketId: null, disconnectedAt: now };
+      seats[seat] = { seatToken: persistedSeat.seatToken, socketId: null, disconnectedAt: now, email: persistedSeat.email };
     }
 
     const hydrated: LiveRoom<TState, TSeat> = {
@@ -148,7 +165,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return hydrated;
   }
 
-  async joinRoom(code: string, role: Role<TSeat>, socketId: string): Promise<JoinResult<TSeat, unknown>> {
+  async joinRoom(code: string, role: Role<TSeat>, socketId: string, email?: string): Promise<JoinResult<TSeat, unknown>> {
     const room = await this.getRoom(code);
     if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
 
@@ -178,7 +195,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     }
 
     const seatToken = nanoid(21);
-    room.seats[role] = { seatToken, socketId, disconnectedAt: null };
+    room.seats[role] = { seatToken, socketId, disconnectedAt: null, email };
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
@@ -263,6 +280,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       return { ok: false, error: { code: 'NOT_A_PLAYER', message: 'Only a seated player may act.' } };
     }
 
+    const previousState = room.gameState;
     let result: EngineResult<TState, any>;
     try {
       result = action(room.gameState, binding.role);
@@ -279,7 +297,38 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     room.lastActivityAt = Date.now();
     await this.persist(room);
     this.broadcastState(room, result.data);
+    this.notifyTurnIfOffline(room, previousState);
     return { ok: true };
+  }
+
+  /**
+   * Async play: if this action just handed the turn to a seat that has no
+   * live socket connected — comparing GameModule.getActiveSeat before vs.
+   * after — and that seat has an email on file, sends a "it's your turn"
+   * notification. Fire-and-forget: never awaited, so a slow/broken email
+   * API can't delay the acting player's own response. No dedup bookkeeping
+   * needed — this only ever fires once per hand-off to a new active seat,
+   * since the very next time it could fire again is if the turn changes to
+   * someone (which can't happen while the current seat is still active).
+   */
+  private notifyTurnIfOffline(room: LiveRoom<TState, TSeat>, previousState: TState): void {
+    if (!this.module.getActiveSeat) return;
+    const before = this.module.getActiveSeat(previousState);
+    const after = this.module.getActiveSeat(room.gameState);
+    if (!after || after === before) return;
+
+    const seat = room.seats[after];
+    if (!seat || seat.socketId !== null || !seat.email) return;
+
+    const path = this.module.roomUrlPath?.(room.code);
+    const link = this.appBaseUrl && path ? `${this.appBaseUrl}${path}?seat=${encodeURIComponent(after)}&token=${encodeURIComponent(seat.seatToken)}` : null;
+    const subject = `It's your turn in ${this.module.displayName}!`;
+    const text = link
+      ? `It's your turn in ${this.module.displayName} — room ${room.code}.\n\n${link}`
+      : `It's your turn in ${this.module.displayName} — room ${room.code}.`;
+    this.emailSender
+      .send(seat.email, subject, text)
+      .catch((error) => console.error(`[roomStore:${this.module.id}] turn notification failed:`, error));
   }
 
   private viewFor(room: LiveRoom<TState, TSeat>, viewer: TSeat | 'spectator'): unknown {
@@ -333,10 +382,10 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   }
 
   private async persist(room: LiveRoom<TState, TSeat>): Promise<void> {
-    const seats = {} as Partial<Record<TSeat, { seatToken: string }>>;
+    const seats = {} as Partial<Record<TSeat, { seatToken: string; email?: string }>>;
     for (const seat of room.seatOrder) {
       const s = room.seats[seat];
-      if (s) seats[seat] = { seatToken: s.seatToken };
+      if (s) seats[seat] = { seatToken: s.seatToken, email: s.email };
     }
     const persisted: PersistedRoom<TState, TSeat> = {
       code: room.code,

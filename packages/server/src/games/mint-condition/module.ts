@@ -42,4 +42,11 @@ export const mintConditionModule: GameModule<GameState, MintConditionConfig, Sea
   // No afterMutation: legal bid options are computed client-side from the
   // viewer's own redacted hand + the public current-bid amount, so no
   // extra targeted server push is needed the way Hyper Bloom's legal_moves is.
+
+  getActiveSeat(state) {
+    if (state.phase === 'auction-active') return state.auction.activeSeat;
+    if (state.phase === 'awaiting-prize-choice' || state.phase === 'awaiting-new-prize-placement') return state.auction.winnerSeat;
+    return null; // 'ended'
+  },
+  roomUrlPath: (code) => `/mint-condition/room/${code}`,
 };

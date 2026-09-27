@@ -13,7 +13,7 @@ import type {
   SeatId as LoveTrianglesSeatId,
 } from '@denimcat/engine-love-triangles';
 import type { Color as TashKalarSeatId, GameState as TashKalarState, TashKalarConfig } from '@denimcat/engine-tashkalar';
-import { RoomStore, attachSocketHandlers, createDefaultRoomRepository, ensureSchema } from '@denimcat/platform';
+import { RoomStore, attachSocketHandlers, createDefaultEmailSender, createDefaultRoomRepository, ensureSchema, type RoomStoreOptions } from '@denimcat/platform';
 import { createApp } from './app';
 import { hyperBloomModule } from '../../../private-games/other-games/server-hyperbloom/module';
 import { mintConditionModule } from './games/mint-condition/module';
@@ -38,9 +38,17 @@ async function main() {
     cors: { origin: clientOrigins && clientOrigins.length > 0 ? clientOrigins : '*' },
   });
 
+  // Async play: one shared EmailSender + base URL for every game's turn
+  // notifications (see RoomStore.notifyTurnIfOffline). Resend when
+  // RESEND_API_KEY/RESEND_FROM are set, else a noop sender that just logs.
+  const roomStoreOptions: RoomStoreOptions = {
+    emailSender: createDefaultEmailSender(),
+    appBaseUrl: process.env.APP_BASE_URL,
+  };
+
   const hyperBloomRepository = createDefaultRoomRepository<HyperBloomState, Color>();
   const hyperBloomNsp = io.of(hyperBloomModule.namespace);
-  const hyperBloomStore = new RoomStore(hyperBloomModule, hyperBloomRepository, hyperBloomNsp);
+  const hyperBloomStore = new RoomStore(hyperBloomModule, hyperBloomRepository, hyperBloomNsp, roomStoreOptions);
   attachSocketHandlers(hyperBloomNsp, hyperBloomStore, hyperBloomModule);
 
   const mintConditionRepository = createDefaultRoomRepository<MintConditionState, MintConditionSeatId>();
@@ -49,6 +57,7 @@ async function main() {
     mintConditionModule,
     mintConditionRepository,
     mintConditionNsp,
+    roomStoreOptions,
   );
   attachSocketHandlers(mintConditionNsp, mintConditionStore, mintConditionModule);
 
@@ -58,6 +67,7 @@ async function main() {
     loveTrianglesModule,
     loveTrianglesRepository,
     loveTrianglesNsp,
+    roomStoreOptions,
   );
   attachSocketHandlers(loveTrianglesNsp, loveTrianglesStore, loveTrianglesModule);
 
@@ -67,6 +77,7 @@ async function main() {
     tashKalarModule,
     tashKalarRepository,
     tashKalarNsp,
+    roomStoreOptions,
   );
   attachSocketHandlers(tashKalarNsp, tashKalarStore, tashKalarModule);
 
