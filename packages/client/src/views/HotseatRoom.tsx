@@ -4,10 +4,38 @@ import type { RoomConnection } from '../state/useRoomConnection';
 /**
  * Mounts one real, correctly-redacted connection for `seat` — auto-joining
  * or auto-reconnecting via `useActions`'s `role` option, no manual seat-pick
- * click needed — and reports it up to HotseatRoom on every change. Renders
- * nothing itself; one of these exists per seat, mounted via `.map()` in the
- * parent (never in a loop inside a single component), so each keeps its own
- * `useActions` hook call and this respects the Rules of Hooks.
+ * click needed — and reports it up to HotseatRoom whenever it meaningfully
+ * changes. Renders nothing itself; one of these exists per seat, mounted
+ * via `.map()` in the parent (never in a loop inside a single component),
+ * so each keeps its own `useActions` hook call and this respects the Rules
+ * of Hooks.
+ *
+ * Every game's `useActions` wrapper (e.g. Tash-Kalar's
+ * `useTashKalarActions`) returns `{...connection, ...actionCallbacks}` — a
+ * brand-new object identity on every single render, regardless of whether
+ * anything real changed. Firing `onConnection` on every render (since
+ * `onConnection` itself sets state) can cascade into React's "Maximum
+ * update depth exceeded" once other per-render work in a game's own view
+ * makes each cycle fast enough to chain many of these within a single
+ * flush (confirmed: this is what blanked the screen). An earlier version
+ * of this fix depended on a fixed allowlist of `RoomConnection`'s own
+ * fields (`status`/`gameState`/`you`/`lastError`/`roomInfo`) — but a
+ * game's `useActions` wrapper can add its OWN extra reactive state beyond
+ * that base interface (e.g. Hyper Bloom's `legalMoves`, pushed by a
+ * separate `legal_moves` socket event slightly after the `game_state` one
+ * that updates `gameState`); the allowlist has no way to know about those,
+ * so an update to only that extra field never re-fired this effect and the
+ * reported connection stayed stuck showing its value from a moment
+ * earlier — confirmed bug: right after hotseat setup finished, red's
+ * `legalMoves` snapshot froze at its initial empty value forever, since
+ * nothing highlighted and no click could match a "legal" set that was
+ * empty. Snapshotting the whole connection's own data fields (skipping
+ * action-callback functions, which JSON.stringify drops automatically)
+ * and only calling `onConnection` when that snapshot actually changes
+ * fixes both problems at once — genuinely new data always changes the
+ * snapshot (so it's never missed, for ANY current or future extra field
+ * a game adds), while a same-data re-render always produces an identical
+ * snapshot (so the loop still can't run away).
  */
 function HotseatSeatConnector<TConnection extends RoomConnection<unknown>>({
   seat,
@@ -21,7 +49,11 @@ function HotseatSeatConnector<TConnection extends RoomConnection<unknown>>({
   onConnection: (seat: string, connection: TConnection) => void;
 }) {
   const connection = useActions(roomCode, { role: seat });
+  const lastSnapshotRef = useRef<string | null>(null);
   useEffect(() => {
+    const snapshot = JSON.stringify(connection);
+    if (snapshot === lastSnapshotRef.current) return;
+    lastSnapshotRef.current = snapshot;
     onConnection(seat, connection);
   });
   return null;
