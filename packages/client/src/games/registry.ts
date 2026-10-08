@@ -30,4 +30,10 @@ export const GAMES: GameDescriptor[] = [
     namespace: '/tashkalar',
     tagline: 'Testing fan factions',
   },
+  {
+    slug: 'kingsgate',
+    displayName: "King's Gate",
+    namespace: '/kingsgate',
+    tagline: 'A 3-4 player tile-laying game of feuding lords.',
+  },
 ];

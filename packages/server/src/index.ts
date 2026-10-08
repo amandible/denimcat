@@ -13,12 +13,14 @@ import type {
   SeatId as LoveTrianglesSeatId,
 } from '@denimcat/engine-love-triangles';
 import type { Color as TashKalarSeatId, GameState as TashKalarState, TashKalarConfig } from '@denimcat/engine-tashkalar';
+import type { Color as KingsGateSeatId, GameState as KingsGateState, KingsGateConfig } from '@denimcat/engine-kingsgate';
 import { RoomStore, attachSocketHandlers, createDefaultEmailSender, createDefaultRoomRepository, ensureSchema, type RoomStoreOptions } from '@denimcat/platform';
 import { createApp } from './app';
 import { hyperBloomModule } from '../../../private-games/other-games/server-hyperbloom/module';
 import { mintConditionModule } from './games/mint-condition/module';
 import { loveTrianglesModule } from './games/love-triangles/module';
 import { tashKalarModule } from '../../../private-games/other-games/server-tashkalar/module';
+import { kingsGateModule } from '../../../private-games/other-games/server-kingsgate/module';
 
 async function main() {
   await ensureSchema();
@@ -80,6 +82,16 @@ async function main() {
     roomStoreOptions,
   );
   attachSocketHandlers(tashKalarNsp, tashKalarStore, tashKalarModule);
+
+  const kingsGateRepository = createDefaultRoomRepository<KingsGateState, KingsGateSeatId>();
+  const kingsGateNsp = io.of(kingsGateModule.namespace);
+  const kingsGateStore = new RoomStore<KingsGateState, KingsGateConfig, KingsGateSeatId>(
+    kingsGateModule,
+    kingsGateRepository,
+    kingsGateNsp,
+    roomStoreOptions,
+  );
+  attachSocketHandlers(kingsGateNsp, kingsGateStore, kingsGateModule);
 
   const port = Number(process.env.PORT ?? 4000);
   httpServer.listen(port, () => {

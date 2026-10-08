@@ -6,6 +6,7 @@ export default defineConfig({
       'test/**/*.test.ts',
       '../../private-games/other-games/server-hyperbloom/test/**/*.test.ts',
       '../../private-games/other-games/server-tashkalar/test/**/*.test.ts',
+      '../../private-games/other-games/server-kingsgate/test/**/*.test.ts',
     ],
   },
 });

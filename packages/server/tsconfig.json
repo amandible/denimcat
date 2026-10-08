@@ -6,10 +6,12 @@
   "include": [
     "src",
     "../../private-games/other-games/server-hyperbloom",
-    "../../private-games/other-games/server-tashkalar"
+    "../../private-games/other-games/server-tashkalar",
+    "../../private-games/other-games/server-kingsgate"
   ],
   "exclude": [
     "../../private-games/other-games/server-hyperbloom/test",
-    "../../private-games/other-games/server-tashkalar/test"
+    "../../private-games/other-games/server-tashkalar/test",
+    "../../private-games/other-games/server-kingsgate/test"
   ]
 }

@@ -4,22 +4,24 @@ import { HyperBloomHomeView } from '../../../private-games/other-games/client-hy
 import { MintConditionHomeView } from './games/mint-condition/HomeView';
 import { LoveTrianglesHomeView } from './games/love-triangles/HomeView';
 import { TashKalarHomeView } from '../../../private-games/other-games/client-tashkalar/HomeView';
+import { KingsGateHomeView } from '../../../private-games/other-games/client-kingsgate/HomeView';
 import { HyperBloomRoom } from '../../../private-games/other-games/client-hyperbloom/HyperBloomRoom';
 import { MintConditionRoom } from './games/mint-condition/MintConditionRoom';
 import { LoveTrianglesRoom } from './games/love-triangles/LoveTrianglesRoom';
 import { TashKalarRoom } from '../../../private-games/other-games/client-tashkalar/TashKalarRoom';
+import { KingsGateRoom } from '../../../private-games/other-games/client-kingsgate/KingsGateRoom';
 
-type Slug = 'hyperbloom' | 'mint-condition' | 'love-triangles' | 'tashkalar';
+type Slug = 'hyperbloom' | 'mint-condition' | 'love-triangles' | 'tashkalar' | 'kingsgate';
 
 type Route = { kind: 'home' } | { kind: 'game-home'; slug: Slug } | { kind: 'room'; slug: Slug; roomCode: string };
 
 function parseRoute(): Route {
   const path = window.location.pathname;
-  const roomMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar)\/room\/([A-Za-z0-9]{4})$/);
+  const roomMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/room\/([A-Za-z0-9]{4})$/);
   if (roomMatch) {
     return { kind: 'room', slug: roomMatch[1] as Slug, roomCode: roomMatch[2].toUpperCase() };
   }
-  const gameMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar)\/?$/);
+  const gameMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/?$/);
   if (gameMatch) {
     return { kind: 'game-home', slug: gameMatch[1] as Slug };
   }
@@ -31,6 +33,7 @@ const HOME_VIEWS: Record<Slug, () => JSX.Element> = {
   'mint-condition': MintConditionHomeView,
   'love-triangles': LoveTrianglesHomeView,
   tashkalar: TashKalarHomeView,
+  kingsgate: KingsGateHomeView,
 };
 
 const ROOM_VIEWS: Record<Slug, (props: { roomCode: string }) => JSX.Element> = {
@@ -38,6 +41,7 @@ const ROOM_VIEWS: Record<Slug, (props: { roomCode: string }) => JSX.Element> = {
   'mint-condition': MintConditionRoom,
   'love-triangles': LoveTrianglesRoom,
   tashkalar: TashKalarRoom,
+  kingsgate: KingsGateRoom,
 };
 
 export function App() {
