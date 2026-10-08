@@ -9,6 +9,15 @@ import type { PersistedRoom, RoomRepository } from './roomRepository';
 const RECONNECT_GRACE_MS = 2 * 60 * 1000;
 const IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
 const IDLE_ROOM_TIMEOUT_MS = 30 * 60 * 1000;
+/**
+ * A room where ANY seat has ever supplied an email (see LiveRoom.knownEmails
+ * and idleTimeoutFor's own doc comment for why "any" rather than "every")
+ * reads as a real async game rather than an abandoned/hotseat-testing one —
+ * give it weeks, not minutes, so two players genuinely trading moves days
+ * apart can never lose to this sweep. There's no real cost to a dormant
+ * room sitting in Postgres this long (one JSONB row).
+ */
+const IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS = 14 * 24 * 60 * 60 * 1000;
 
 interface LiveSeat {
   seatToken: string;
@@ -23,6 +32,8 @@ interface LiveRoom<TState, TSeat extends string> {
   gameState: TState;
   seatOrder: readonly TSeat[];
   seats: Partial<Record<TSeat, LiveSeat>>;
+  /** Every email any seat has EVER supplied — see PersistedRoom.knownEmails's doc comment for why this outlives `seats`. */
+  knownEmails: Partial<Record<TSeat, string>>;
   spectatorSocketIds: Set<string>;
   createdAt: number;
   lastActivityAt: number;
@@ -34,6 +45,8 @@ export interface RoomStoreOptions {
   graceMs?: number;
   idleSweepMs?: number;
   idleTimeoutMs?: number;
+  /** Applied instead of `idleTimeoutMs` for a room where any seat has ever supplied an email — see IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS. */
+  idleTimeoutWithEmailsMs?: number;
   /**
    * Async play: sends a "it's your turn" email when GameModule.getActiveSeat
    * hands the turn to a seat that has no live socket connected right now
@@ -71,6 +84,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   private sweepTimer: NodeJS.Timeout;
   private graceMs: number;
   private idleTimeoutMs: number;
+  private idleTimeoutWithEmailsMs: number;
   private emailSender: EmailSender;
   private appBaseUrl?: string;
 
@@ -82,6 +96,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   ) {
     this.graceMs = options.graceMs ?? RECONNECT_GRACE_MS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_ROOM_TIMEOUT_MS;
+    this.idleTimeoutWithEmailsMs = options.idleTimeoutWithEmailsMs ?? IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS;
     this.emailSender = options.emailSender ?? createNoopEmailSender();
     this.appBaseUrl = options.appBaseUrl;
     this.sweepTimer = setInterval(
@@ -115,6 +130,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       gameState: this.module.createInitialState(config),
       seatOrder,
       seats: {},
+      knownEmails: {},
       spectatorSocketIds: new Set(),
       createdAt: now,
       lastActivityAt: now,
@@ -143,10 +159,15 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
 
     const now = Date.now();
     const seats: Partial<Record<TSeat, LiveSeat>> = {};
+    // Backfilled from any still-present per-seat email, not just
+    // persisted.knownEmails directly — a room saved before this field
+    // existed still has its emails sitting on `seats[...].email`.
+    const knownEmails: Partial<Record<TSeat, string>> = { ...persisted.knownEmails };
     for (const seat of persisted.seatOrder) {
       const persistedSeat = persisted.seats[seat];
       if (!persistedSeat) continue;
       seats[seat] = { seatToken: persistedSeat.seatToken, socketId: null, disconnectedAt: now, email: persistedSeat.email };
+      if (persistedSeat.email) knownEmails[seat] = persistedSeat.email;
     }
 
     const hydrated: LiveRoom<TState, TSeat> = {
@@ -154,6 +175,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       gameState: persisted.gameState,
       seatOrder: persisted.seatOrder,
       seats,
+      knownEmails,
       spectatorSocketIds: new Set(),
       createdAt: persisted.createdAt,
       lastActivityAt: persisted.lastActivityAt,
@@ -196,6 +218,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
 
     const seatToken = nanoid(21);
     room.seats[role] = { seatToken, socketId, disconnectedAt: null, email };
+    if (email) room.knownEmails[role] = email;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
@@ -304,7 +327,11 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   /**
    * Async play: if this action just handed the turn to a seat that has no
    * live socket connected — comparing GameModule.getActiveSeat before vs.
-   * after — and that seat has an email on file, sends a "it's your turn"
+   * after — and we've ever been given an email for that seat (knownEmails,
+   * NOT seats[...].email — the live seat entry, and its email along with
+   * it, is deleted once that seat's reconnect grace lapses, which happens
+   * on essentially every turn in real async play; knownEmails is the
+   * durable record that survives that), sends a "it's your turn"
    * notification. Fire-and-forget: never awaited, so a slow/broken email
    * API can't delay the acting player's own response. No dedup bookkeeping
    * needed — this only ever fires once per hand-off to a new active seat,
@@ -317,17 +344,28 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     const after = this.module.getActiveSeat(room.gameState);
     if (!after || after === before) return;
 
-    const seat = room.seats[after];
-    if (!seat || seat.socketId !== null || !seat.email) return;
+    if (room.seats[after]?.socketId) return; // currently connected — no need to notify
+    const email = room.knownEmails[after];
+    if (!email) return;
 
+    // A live seat entry (and its token) may already be gone by now — its
+    // own 2-minute reconnect grace lapsed before this later turn even came
+    // back around, which is the normal case in real async play. The link
+    // still works either way: with a token it reconnects straight back in,
+    // without one the client just falls back to its own seat-picker lobby,
+    // same as any other stale-token reconnect attempt (see useRoomConnection.ts).
+    const seatToken = room.seats[after]?.seatToken;
     const path = this.module.roomUrlPath?.(room.code);
-    const link = this.appBaseUrl && path ? `${this.appBaseUrl}${path}?seat=${encodeURIComponent(after)}&token=${encodeURIComponent(seat.seatToken)}` : null;
+    const link =
+      this.appBaseUrl && path
+        ? `${this.appBaseUrl}${path}${seatToken ? `?seat=${encodeURIComponent(after)}&token=${encodeURIComponent(seatToken)}` : ''}`
+        : null;
     const subject = `It's your turn in ${this.module.displayName}!`;
     const text = link
       ? `It's your turn in ${this.module.displayName} — room ${room.code}.\n\n${link}`
       : `It's your turn in ${this.module.displayName} — room ${room.code}.`;
     this.emailSender
-      .send(seat.email, subject, text)
+      .send(email, subject, text)
       .catch((error) => console.error(`[roomStore:${this.module.id}] turn notification failed:`, error));
   }
 
@@ -393,6 +431,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       gameState: room.gameState,
       seatOrder: [...room.seatOrder],
       seats,
+      knownEmails: { ...room.knownEmails },
       createdAt: room.createdAt,
       lastActivityAt: room.lastActivityAt,
     };
@@ -430,11 +469,26 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     this.broadcastRoomInfo(room);
   }
 
+  /**
+   * ANY seat (not necessarily every seat) ever supplying an email is enough
+   * to read a room as a real async game rather than a hotseat test — e.g.
+   * creating a room, supplying your own email, and messaging a friend to
+   * join later: the friend hasn't joined yet (or might never bother typing
+   * an email even once they do), but the room still shouldn't expire
+   * before they get around to it. A hotseat room never collects an email
+   * for any seat at all, so this still correctly excludes every one of
+   * those — see IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS.
+   */
+  private idleTimeoutFor(room: LiveRoom<TState, TSeat>): number {
+    const anySeatHasEmail = Object.keys(room.knownEmails).length > 0;
+    return anySeatHasEmail ? this.idleTimeoutWithEmailsMs : this.idleTimeoutMs;
+  }
+
   private async sweepIdleRooms(): Promise<void> {
     const now = Date.now();
     for (const [code, room] of this.cache) {
       const hasOccupant = Object.keys(room.seats).length > 0 || room.spectatorSocketIds.size > 0;
-      if (!hasOccupant && now - room.lastActivityAt > this.idleTimeoutMs) {
+      if (!hasOccupant && now - room.lastActivityAt > this.idleTimeoutFor(room)) {
         this.cache.delete(code);
         await this.repository.delete(code);
       }

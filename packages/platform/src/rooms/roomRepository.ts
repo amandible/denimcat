@@ -24,6 +24,18 @@ export interface PersistedRoom<TState, TSeat extends string> {
    */
   seatOrder: TSeat[];
   seats: Partial<Record<TSeat, PersistedSeat>>;
+  /**
+   * Every email a seat has EVER supplied for this room, keyed by seat — kept
+   * separate from `seats[...].email` because a seat entry itself is deleted
+   * once its reconnect grace period lapses (RoomStore.expireSeat), which
+   * would otherwise silently erase the one piece of information async-play
+   * notifications and the long-idle-timeout check both depend on, right
+   * around the time a real async game needs it most (every time a player
+   * goes offline between turns). Never cleared once set. Optional only for
+   * backward compatibility with rooms persisted before this field existed —
+   * RoomStore.hydrateRoom backfills it from `seats[...].email` on read.
+   */
+  knownEmails?: Partial<Record<TSeat, string>>;
   createdAt: number;
   lastActivityAt: number;
 }

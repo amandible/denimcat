@@ -213,4 +213,104 @@ describe('RoomStore async-play turn notifications', () => {
 
     store.stop();
   });
+
+  it(
+    "still emails a seat whose LIVE seat entry is already gone (its own 2-minute reconnect " +
+      'grace lapsed before this later turn came back around — the normal case in real async ' +
+      'play) as long as knownEmails still has their address on file',
+    async () => {
+      const repo = new InMemoryRoomRepository<TurnState, TurnSeat>();
+      await repo.save({
+        code: 'KKKK',
+        gameId: 'turn-game',
+        gameState: { turn: 'p1' },
+        seatOrder: ['p1', 'p2'],
+        seats: { p1: { seatToken: 'tok-1' } }, // p2's seat entry is gone, exactly what expireSeat leaves behind
+        knownEmails: { p1: 'p1@example.com', p2: 'p2@example.com' }, // but p2's email is still known
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+      });
+      const sender = fakeEmailSender();
+      const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+      await store.reconnectRoom('KKKK', 'p1', 'tok-1', 'socket-1');
+      const result = await store.applyAction('KKKK', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+      expect(result.ok).toBe(true);
+
+      expect(sender.calls).toHaveLength(1);
+      expect(sender.calls[0].to).toBe('p2@example.com');
+
+      store.stop();
+    },
+  );
+});
+
+describe('RoomStore idle-room sweep — tiered timeout based on known emails', () => {
+  async function seedEmptyRoom(
+    code: string,
+    knownEmails: Partial<Record<TurnSeat, string>>,
+    lastActivityAt: number,
+  ): Promise<InMemoryRoomRepository<TurnState, TurnSeat>> {
+    const repo = new InMemoryRoomRepository<TurnState, TurnSeat>();
+    await repo.save({
+      code,
+      gameId: 'turn-game',
+      gameState: { turn: 'p1' },
+      seatOrder: ['p1', 'p2'],
+      seats: {}, // nobody currently occupies a seat — eligible for sweeping
+      knownEmails,
+      createdAt: lastActivityAt,
+      lastActivityAt,
+    });
+    return repo;
+  }
+
+  it(
+    'keeps a room using the long timeout even when only ONE of its two seats has a known ' +
+      "email — e.g. creating a room, supplying your own email, and messaging a friend to join " +
+      "later; the friend hasn't joined yet (or might never type an email even once they do), " +
+      'but the room must not expire before they get around to it',
+    async () => {
+      const past = Date.now() - 1000; // already well past a short timeout, nowhere near a long one
+      const repo = new InMemoryRoomRepository<TurnState, TurnSeat>();
+      await repo.save({
+        code: 'ONEE',
+        gameId: 'turn-game',
+        gameState: { turn: 'p1' },
+        seatOrder: ['p1', 'p2'],
+        seats: {},
+        knownEmails: { p1: 'p1@example.com' }, // p2 has no email on file at all — never joined, or joined without one
+        createdAt: past,
+        lastActivityAt: past,
+      });
+
+      const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), {
+        idleSweepMs: 15,
+        idleTimeoutMs: 20,
+        idleTimeoutWithEmailsMs: 10_000,
+      });
+
+      await store.getRoom('ONEE');
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      expect(await repo.get('ONEE')).not.toBeNull();
+      store.stop();
+    },
+  );
+
+  it('a room no one has ever joined (no known emails at all) uses the short timeout, not the long one', async () => {
+    const past = Date.now() - 1000;
+    const repo = await seedEmptyRoom('EMPT', {}, past);
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), {
+      idleSweepMs: 15,
+      idleTimeoutMs: 20,
+      idleTimeoutWithEmailsMs: 10_000,
+    });
+
+    await store.getRoom('EMPT');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(await repo.get('EMPT')).toBeNull();
+    store.stop();
+  });
 });
