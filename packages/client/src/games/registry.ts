@@ -10,7 +10,7 @@ export const GAMES: GameDescriptor[] = [
     slug: 'hyperbloom',
     displayName: 'Hyper Bloom',
     namespace: '/hyperbloom',
-    tagline: 'A 2-player abstract deckbuilder.',
+    tagline: 'A 2-4 player abstract deckbuilder.',
   },
   {
     slug: 'mint-condition',
