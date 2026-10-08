@@ -10,6 +10,7 @@
     "src",
     "middleware.ts",
     "../../private-games/other-games/client-hyperbloom",
-    "../../private-games/other-games/client-tashkalar"
+    "../../private-games/other-games/client-tashkalar",
+    "../../private-games/other-games/client-kingsgate"
   ]
 }
