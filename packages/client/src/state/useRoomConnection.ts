@@ -30,7 +30,8 @@ export interface RoomInfo {
   code: string;
   /** The room's fixed seat list, sized by whatever config it was created with — always present, even for empty seats. */
   seatOrder: string[];
-  seats: Record<string, { connected: boolean } | undefined>;
+  /** `name` is whatever the occupying player optionally supplied at join time — absent if they left it blank. */
+  seats: Record<string, { connected: boolean; name?: string } | undefined>;
   spectatorCount: number;
 }
 
@@ -40,7 +41,7 @@ export interface RoomConnection<TView> {
   gameState: TView | null;
   roomInfo: RoomInfo | null;
   lastError: string | null;
-  joinAs: (role: string, email?: string) => void;
+  joinAs: (role: string, email?: string, name?: string) => void;
   leaveSeat: () => void;
   /** Generic action escape hatch: emits `event` with `{roomCode, ...payload}` and just surfaces any error. */
   sendAction: (event: string, payload?: Record<string, unknown>) => void;
@@ -153,15 +154,39 @@ export function useRoomConnection<TView>(
       socket.on(event, handler);
     }
 
+    // Reports whether this tab is actively foregrounded (see `set_presence`
+    // in the shared contract) so RoomStore can tell the difference between
+    // "connected and actually watching" (suppress turn-notification emails)
+    // and "connected but the tab's just been left open in the background"
+    // (send them anyway). A brief tab-switch doesn't count as away — only
+    // backgrounded continuously past AWAY_DELAY_MS does, so this never fires
+    // for someone actively playing and glancing elsewhere for a few seconds.
+    const AWAY_DELAY_MS = 2 * 60 * 1000;
+    let awayTimer: ReturnType<typeof setTimeout> | null = null;
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        awayTimer = setTimeout(() => socket.emit('set_presence', { roomCode, away: true }), AWAY_DELAY_MS);
+      } else {
+        if (awayTimer) {
+          clearTimeout(awayTimer);
+          awayTimer = null;
+        }
+        socket.emit('set_presence', { roomCode, away: false });
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (awayTimer) clearTimeout(awayTimer);
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameSlug, namespace, roomCode, fixedRole]);
 
   const joinAs = useCallback(
-    (role: string, email?: string) => {
-      socketRef.current?.emit('join_room', { roomCode, role, email }, (res: any) => {
+    (role: string, email?: string, name?: string) => {
+      socketRef.current?.emit('join_room', { roomCode, role, email, name }, (res: any) => {
         if (!res.ok) {
           setLastError(res.error.message);
           return;

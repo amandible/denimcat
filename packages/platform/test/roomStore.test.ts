@@ -77,6 +77,46 @@ describe('RoomStore concurrent hydration', () => {
   );
 });
 
+describe('RoomStore — optional display name at join time', () => {
+  it('surfaces a joined seat\'s name in buildRoomInfo, and omits the field entirely when none was given', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const joined = await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Alex');
+    expect(joined.ok).toBe(true);
+
+    const info = await store.getRoomInfo(created.roomCode);
+    expect(info?.seats.p1).toEqual({ connected: true, name: 'Alex' });
+    expect(info?.seats.p2).toBeUndefined(); // still open — no entry at all
+
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2'); // no name supplied
+    const infoAfter = await store.getRoomInfo(created.roomCode);
+    expect(infoAfter?.seats.p2).toEqual({ connected: true, name: undefined });
+
+    store.stop();
+  });
+
+  it('persists the name across a hydration (room evicted from cache, then re-read from the repository)', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store1 = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store1.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store1.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Alex');
+    store1.stop();
+
+    // A fresh RoomStore simulates a server restart — nothing cached, must
+    // hydrate from the repository alone.
+    const store2 = new RoomStore(makeModule(), repo, fakeNamespace());
+    const info = await store2.getRoomInfo(created.roomCode);
+    expect(info?.seats.p1?.name).toBe('Alex');
+    store2.stop();
+  });
+});
+
 type TurnSeat = 'p1' | 'p2';
 type TurnState = { turn: TurnSeat | null };
 
@@ -170,6 +210,65 @@ describe('RoomStore async-play turn notifications', () => {
     store.stop();
   });
 
+  it(
+    'DOES email a connected seat once it has reported itself "away" via setPresence — a tab left open ' +
+      "in the background shouldn't suppress the reminder just because its socket is technically still up",
+    async () => {
+      const repo = await seedTurnRepo('CCC2', {
+        p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+        p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+      });
+      const sender = fakeEmailSender();
+      const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+      await store.reconnectRoom('CCC2', 'p1', 'tok-1', 'socket-1');
+      await store.reconnectRoom('CCC2', 'p2', 'tok-2', 'socket-2'); // p2 connected but...
+      await store.setPresence('CCC2', 'socket-2', true); // ...backgrounded long enough to report away
+      await store.applyAction('CCC2', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+
+      expect(sender.calls).toHaveLength(1);
+      expect(sender.calls[0].to).toBe('p2@example.com');
+      store.stop();
+    },
+  );
+
+  it('suppresses the email again once an away seat reports itself present via setPresence', async () => {
+    const repo = await seedTurnRepo('CCC3', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+    });
+    const sender = fakeEmailSender();
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+    await store.reconnectRoom('CCC3', 'p1', 'tok-1', 'socket-1');
+    await store.reconnectRoom('CCC3', 'p2', 'tok-2', 'socket-2');
+    await store.setPresence('CCC3', 'socket-2', true); // backgrounded...
+    await store.setPresence('CCC3', 'socket-2', false); // ...then foregrounded again before p1 moves
+    await store.applyAction('CCC3', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+
+    expect(sender.calls).toHaveLength(0);
+    store.stop();
+  });
+
+  it('a fresh reconnect always resets a seat back to "present", even if it was away before disconnecting', async () => {
+    const repo = await seedTurnRepo('CCC4', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
+    });
+    const sender = fakeEmailSender();
+    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
+
+    await store.reconnectRoom('CCC4', 'p1', 'tok-1', 'socket-1');
+    await store.reconnectRoom('CCC4', 'p2', 'tok-2', 'socket-2a');
+    await store.setPresence('CCC4', 'socket-2a', true);
+    await store.handleDisconnect('socket-2a');
+    await store.reconnectRoom('CCC4', 'p2', 'tok-2', 'socket-2b'); // reconnects on a new socket — presence resets
+    await store.applyAction('CCC4', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+
+    expect(sender.calls).toHaveLength(0); // connected and no longer marked away
+    store.stop();
+  });
+
   it('does not email a seat with no email on file', async () => {
     const repo = await seedTurnRepo('DDDD', {
       p1: { seatToken: 'tok-1', email: 'p1@example.com' },
@@ -239,6 +338,38 @@ describe('RoomStore async-play turn notifications', () => {
 
       expect(sender.calls).toHaveLength(1);
       expect(sender.calls[0].to).toBe('p2@example.com');
+
+      store.stop();
+    },
+  );
+
+  it(
+    'still notifies a player at their ORIGINAL email after they disconnect, their seat expires, and they ' +
+      'rejoin via a fresh join_room WITHOUT retyping it — knownEmails is keyed by room+seat, not by the ' +
+      'live seat entry, so a blank email field on rejoin never erases what was already on file',
+    async () => {
+      const repo = new InMemoryRoomRepository<TurnState, TurnSeat>();
+      const sender = fakeEmailSender();
+      const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender, graceMs: 20 });
+
+      const created = await store.createRoom(undefined);
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      const code = created.roomCode;
+
+      await store.joinRoom(code, 'p1', 's1', 'p1@example.com');
+      await store.joinRoom(code, 'p2', 's2', 'p2@example.com');
+      await store.applyAction(code, 's1', () => ok<TurnState>({ turn: 'p2' })); // p1 -> p2
+
+      await store.handleDisconnect('s1');
+      await new Promise((r) => setTimeout(r, 100)); // let p1's reconnect grace (20ms) actually lapse
+
+      await store.joinRoom(code, 'p1', 's3'); // rejoin as p1 — no email supplied this time
+      await store.handleDisconnect('s3'); // and goes offline again
+
+      await store.applyAction(code, 's2', () => ok<TurnState>({ turn: 'p1' })); // p2 -> p1, while p1 is offline
+
+      expect(sender.calls.some((c) => c.to === 'p1@example.com')).toBe(true);
 
       store.stop();
     },

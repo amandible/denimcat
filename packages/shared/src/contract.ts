@@ -6,7 +6,8 @@ export interface RoomInfo<TSeat extends string> {
   code: string;
   /** The room's fixed seat list, sized by whatever config it was created with — always present, even for empty seats. */
   seatOrder: TSeat[];
-  seats: Partial<Record<TSeat, { connected: boolean }>>;
+  /** `name` is whatever the occupying player optionally supplied at join time — absent if they left it blank. */
+  seats: Partial<Record<TSeat, { connected: boolean; name?: string }>>;
   spectatorCount: number;
 }
 
@@ -37,13 +38,31 @@ export interface RoomLifecycleClientToServerEvents<TSeat extends string, TConfig
   create_room: (config: unknown, cb: (res: { ok: true; roomCode: string } | { ok: false; error: EngineError }) => void) => void;
   /** Read-only: lets a client learn a room's actual seat list before choosing a role — binds nothing, joins no seat. */
   peek_room: (payload: { roomCode: string }, cb: (res: PeekRoomResult<TSeat>) => void) => void;
-  /** `email` is optional and only meaningful for a real seat (ignored for 'spectator') — see RoomStore's async-play turn notifications. */
-  join_room: (payload: { roomCode: string; role: Role<TSeat>; email?: string }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
+  /**
+   * `email` and `name` are both optional and only meaningful for a real seat
+   * (ignored for 'spectator'): `email` is used for RoomStore's async-play
+   * turn notifications, while `name` is purely a display label shown to
+   * other players (in RoomInfo.seats) for as long as the seat is occupied —
+   * it is never validated for uniqueness and carries no other meaning.
+   */
+  join_room: (payload: { roomCode: string; role: Role<TSeat>; email?: string; name?: string }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
   reconnect_room: (
     payload: { roomCode: string; role: TSeat; seatToken: string },
     cb: (res: JoinResult<TSeat, TView>) => void,
   ) => void;
   leave_seat: (payload: { roomCode: string }, cb: (res: { ok: true }) => void) => void;
+  /**
+   * Fire-and-forget presence hint (no ack) — lets a client tell the server
+   * whether its tab is actively foregrounded (`away: false`) or has been
+   * backgrounded long enough to treat as unattended (`away: true`), purely
+   * to decide whether RoomStore's async-play turn-notification email should
+   * fire for an otherwise-still-connected seat: a live player with the tab
+   * foregrounded shouldn't be emailed about their own game, but one who
+   * leaves the tab open in the background while playing async should still
+   * get reminded. Ephemeral — never persisted, and reset to "present" on
+   * every reconnect/join (see RoomStore.setPresence).
+   */
+  set_presence: (payload: { roomCode: string; away: boolean }) => void;
 }
 
 export interface RoomLifecycleServerToClientEvents<TSeat extends string, TView> {

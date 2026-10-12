@@ -25,6 +25,10 @@ interface LiveSeat {
   disconnectedAt: number | null;
   /** Optional, supplied at join time — see RoomStoreOptions.emailSender's doc comment for what it's used for. */
   email?: string;
+  /** Optional, supplied at join time — a display label shown to other players (via buildRoomInfo) for as long as this seat stays occupied. Never validated for uniqueness. */
+  name?: string;
+  /** Client-reported presence hint (see RoomStore.setPresence) — true once this tab has been backgrounded long enough that notifyTurnIfOffline should treat it as unattended despite the socket still being connected. Ephemeral: never persisted, defaults to false for every freshly created/hydrated seat. */
+  away: boolean;
 }
 
 interface LiveRoom<TState, TSeat extends string> {
@@ -166,7 +170,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     for (const seat of persisted.seatOrder) {
       const persistedSeat = persisted.seats[seat];
       if (!persistedSeat) continue;
-      seats[seat] = { seatToken: persistedSeat.seatToken, socketId: null, disconnectedAt: now, email: persistedSeat.email };
+      seats[seat] = { seatToken: persistedSeat.seatToken, socketId: null, disconnectedAt: now, email: persistedSeat.email, name: persistedSeat.name, away: false };
       if (persistedSeat.email) knownEmails[seat] = persistedSeat.email;
     }
 
@@ -187,7 +191,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return hydrated;
   }
 
-  async joinRoom(code: string, role: Role<TSeat>, socketId: string, email?: string): Promise<JoinResult<TSeat, unknown>> {
+  async joinRoom(code: string, role: Role<TSeat>, socketId: string, email?: string, name?: string): Promise<JoinResult<TSeat, unknown>> {
     const room = await this.getRoom(code);
     if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
 
@@ -217,7 +221,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     }
 
     const seatToken = nanoid(21);
-    room.seats[role] = { seatToken, socketId, disconnectedAt: null, email };
+    room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name, away: false };
     if (email) room.knownEmails[role] = email;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
@@ -238,6 +242,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     this.clearGraceTimer(code, role);
     seat.socketId = socketId;
     seat.disconnectedAt = null;
+    seat.away = false; // a fresh reconnect is always "present" until told otherwise
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
@@ -286,6 +291,23 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   }
 
   /**
+   * Records a client's own presence hint (see the `set_presence` contract
+   * doc comment) against whichever seat `socketId` is bound to — a no-op
+   * for a spectator binding or a binding that's gone stale (room already
+   * gone, or the socket was never actually bound to a real seat). Never
+   * broadcasts or persists: this is purely consulted by notifyTurnIfOffline
+   * the next time a turn hands off, not reflected in RoomInfo.
+   */
+  async setPresence(code: string, socketId: string, away: boolean): Promise<void> {
+    const binding = this.socketBindings.get(socketId);
+    if (!binding || binding.code !== code || binding.role === 'spectator') return;
+
+    const room = await this.getRoom(code);
+    const seat = room?.seats[binding.role];
+    if (seat) seat.away = away;
+  }
+
+  /**
    * Runs a game-engine mutation for whichever seat `socketId` is bound to.
    * The acting seat always comes from the socket→seat binding, never from
    * client-supplied data, so a player can never act as a different seat.
@@ -326,17 +348,20 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
 
   /**
    * Async play: if this action just handed the turn to a seat that has no
-   * live socket connected — comparing GameModule.getActiveSeat before vs.
-   * after — and we've ever been given an email for that seat (knownEmails,
-   * NOT seats[...].email — the live seat entry, and its email along with
-   * it, is deleted once that seat's reconnect grace lapses, which happens
-   * on essentially every turn in real async play; knownEmails is the
-   * durable record that survives that), sends a "it's your turn"
-   * notification. Fire-and-forget: never awaited, so a slow/broken email
-   * API can't delay the acting player's own response. No dedup bookkeeping
-   * needed — this only ever fires once per hand-off to a new active seat,
-   * since the very next time it could fire again is if the turn changes to
-   * someone (which can't happen while the current seat is still active).
+   * live socket connected, OR has one but it's been reported "away" (see
+   * RoomStore.setPresence — a tab left open in the background long enough
+   * that it shouldn't count as actively watching) — comparing
+   * GameModule.getActiveSeat before vs. after — and we've ever been given
+   * an email for that seat (knownEmails, NOT seats[...].email — the live
+   * seat entry, and its email along with it, is deleted once that seat's
+   * reconnect grace lapses, which happens on essentially every turn in real
+   * async play; knownEmails is the durable record that survives that),
+   * sends a "it's your turn" notification. Fire-and-forget: never awaited,
+   * so a slow/broken email API can't delay the acting player's own
+   * response. No dedup bookkeeping needed — this only ever fires once per
+   * hand-off to a new active seat, since the very next time it could fire
+   * again is if the turn changes to someone (which can't happen while the
+   * current seat is still active).
    */
   private notifyTurnIfOffline(room: LiveRoom<TState, TSeat>, previousState: TState): void {
     if (!this.module.getActiveSeat) return;
@@ -344,7 +369,8 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     const after = this.module.getActiveSeat(room.gameState);
     if (!after || after === before) return;
 
-    if (room.seats[after]?.socketId) return; // currently connected — no need to notify
+    const seat = room.seats[after];
+    if (seat?.socketId && !seat.away) return; // connected AND actively watching — no need to notify
     const email = room.knownEmails[after];
     if (!email) return;
 
@@ -401,10 +427,10 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   }
 
   private buildRoomInfo(room: LiveRoom<TState, TSeat>): RoomInfo<TSeat> {
-    const seats: Partial<Record<TSeat, { connected: boolean }>> = {};
+    const seats: Partial<Record<TSeat, { connected: boolean; name?: string }>> = {};
     for (const seat of room.seatOrder) {
       const s = room.seats[seat];
-      if (s) seats[seat] = { connected: s.socketId !== null };
+      if (s) seats[seat] = { connected: s.socketId !== null, name: s.name };
     }
     return { code: room.code, seatOrder: [...room.seatOrder], seats, spectatorCount: room.spectatorSocketIds.size };
   }
@@ -420,10 +446,10 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   }
 
   private async persist(room: LiveRoom<TState, TSeat>): Promise<void> {
-    const seats = {} as Partial<Record<TSeat, { seatToken: string; email?: string }>>;
+    const seats = {} as Partial<Record<TSeat, { seatToken: string; email?: string; name?: string }>>;
     for (const seat of room.seatOrder) {
       const s = room.seats[seat];
-      if (s) seats[seat] = { seatToken: s.seatToken, email: s.email };
+      if (s) seats[seat] = { seatToken: s.seatToken, email: s.email, name: s.name };
     }
     const persisted: PersistedRoom<TState, TSeat> = {
       code: room.code,

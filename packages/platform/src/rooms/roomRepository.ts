@@ -4,6 +4,8 @@ export interface PersistedSeat {
   seatToken: string;
   /** Optional, supplied at join time — used for async-play turn notifications (see RoomStore.applyAction). */
   email?: string;
+  /** Optional, supplied at join time — a display label shown to other players for as long as this seat is occupied. */
+  name?: string;
 }
 
 /**

@@ -4,6 +4,8 @@ import { isNonEmptyString } from './validate';
 
 const INVALID_PAYLOAD = { code: 'INVALID_PAYLOAD', message: 'Malformed request.' };
 const INTERNAL_ERROR = { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' };
+/** A display label, not an identity — generous, but still bounded so one player can't wreck the seat-list UI for everyone else in the room. */
+const MAX_NAME_LENGTH = 40;
 
 /**
  * The four room-lifecycle events every game shares verbatim. Note "is this
@@ -43,7 +45,7 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       });
   });
 
-  socket.on('join_room', (payload: { roomCode?: unknown; role?: unknown; email?: unknown }, cb: (res: unknown) => void) => {
+  socket.on('join_room', (payload: { roomCode?: unknown; role?: unknown; email?: unknown; name?: unknown }, cb: (res: unknown) => void) => {
     if (!payload || !isNonEmptyString(payload.roomCode) || !isNonEmptyString(payload.role)) {
       cb({ ok: false, error: INVALID_PAYLOAD });
       return;
@@ -52,11 +54,16 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       cb({ ok: false, error: INVALID_PAYLOAD });
       return;
     }
+    if (payload.name !== undefined && (!isNonEmptyString(payload.name) || payload.name.length > MAX_NAME_LENGTH)) {
+      cb({ ok: false, error: INVALID_PAYLOAD });
+      return;
+    }
     const roomCode = payload.roomCode;
     const role = payload.role as TSeat | 'spectator';
     const email = payload.email as string | undefined;
+    const name = payload.name as string | undefined;
     store
-      .joinRoom(roomCode, role, socket.id, email)
+      .joinRoom(roomCode, role, socket.id, email, name)
       .then(async (result) => {
         if (result.ok) {
           socket.join(roomCode);
@@ -121,5 +128,16 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
         console.error('[socket] leave_seat failed:', error);
         cb({ ok: true });
       });
+  });
+
+  // Fire-and-forget (no ack) — a malformed or out-of-order payload is simply
+  // dropped, never surfaced as an error, since this is just a hint toward a
+  // "should we still email them" decision, not something the sender needs
+  // to know the outcome of.
+  socket.on('set_presence', (payload: { roomCode?: unknown; away?: unknown }) => {
+    if (!payload || !isNonEmptyString(payload.roomCode) || typeof payload.away !== 'boolean') return;
+    store.setPresence(payload.roomCode, socket.id, payload.away).catch((error) => {
+      console.error('[socket] set_presence failed:', error);
+    });
   });
 }
