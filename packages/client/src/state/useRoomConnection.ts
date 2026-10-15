@@ -41,6 +41,18 @@ export interface RoomConnection<TView> {
   gameState: TView | null;
   roomInfo: RoomInfo | null;
   lastError: string | null;
+  /**
+   * The role this browser last held a seat-token for in this room, if a
+   * stored token was found but its automatic reconnect failed (almost
+   * always because the seat's own reconnect grace lapsed before this later
+   * visit — the normal case in real async play, not an error). Only ever
+   * set while `status === 'picking-role'`, so a game's lobby view can offer
+   * "continue as X" rather than a bare "join as X" for that one seat — this
+   * player isn't picking a fresh seat, they're coming back to their own.
+   * Null on every other page load (nothing stored, a link/token reconnect
+   * actually worked, or this is hotseat mode).
+   */
+  previousRole: string | null;
   joinAs: (role: string, email?: string, name?: string) => void;
   leaveSeat: () => void;
   /** Generic action escape hatch: emits `event` with `{roomCode, ...payload}` and just surfaces any error. */
@@ -66,6 +78,7 @@ export function useRoomConnection<TView>(
   const [gameState, setGameState] = useState<TView | null>(null);
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [previousRole, setPreviousRole] = useState<string | null>(null);
   const extraListenersRef = useRef(options.extraListeners);
   extraListenersRef.current = options.extraListeners;
   // A fixed role, used only by hotseat mode (one tab, N seats): this
@@ -124,8 +137,19 @@ export function useRoomConnection<TView>(
           // works normally (no link needed) on future visits from this browser.
           saveSeat(gameSlug, roomCode, { role: stored.role, seatToken: stored.seatToken });
         } else {
+          // The stored token no longer works — almost always because this
+          // seat's reconnect grace already lapsed (see RoomStore.expireSeat)
+          // before this later visit, the normal case after any real gap in
+          // async play, not a sign anything went wrong. The role itself is
+          // still worth remembering for the picking-role screen about to
+          // show: this browser isn't a stranger to that seat.
+          setPreviousRole(stored.role);
           clearSeat(gameSlug, roomCode);
-          setLastError(res.error.message);
+          // Suppress the raw "seat token does not match" wording for the
+          // expected case (lapsed grace) — the picking-role screen already
+          // explains it via previousRole. A genuinely missing room is still
+          // worth surfacing as an actual error.
+          setLastError(res.error.code === 'ROOM_NOT_FOUND' ? res.error.message : null);
           setStatus('picking-role');
         }
       });
@@ -195,6 +219,7 @@ export function useRoomConnection<TView>(
         setYou(res.you);
         setStatus('in-room');
         setLastError(null);
+        setPreviousRole(null);
         if (res.seatToken && role !== 'spectator') {
           saveSeat(gameSlug, roomCode, { role, seatToken: res.seatToken });
         }
@@ -222,5 +247,5 @@ export function useRoomConnection<TView>(
     [roomCode],
   );
 
-  return { status, you, gameState, roomInfo, lastError, joinAs, leaveSeat, sendAction };
+  return { status, you, gameState, roomInfo, lastError, previousRole, joinAs, leaveSeat, sendAction };
 }

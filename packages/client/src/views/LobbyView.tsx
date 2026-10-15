@@ -16,12 +16,21 @@ export function LobbyView({
   const seats = connection.roomInfo?.seatOrder ?? candidateSeats;
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  // A stored seat token for this room went stale (its reconnect grace
+  // lapsed since this browser was last here) — unless someone else has
+  // since taken that seat, this player isn't picking a fresh one, they're
+  // coming back to their own. See RoomConnection.previousRole's doc comment.
+  const returningSeat =
+    connection.previousRole && !connection.roomInfo?.seats[connection.previousRole] ? connection.previousRole : null;
 
   return (
     <main style={{ maxWidth: 420, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
       <div className="panel" style={{ width: '100%' }}>
         <h1>Room {roomCode}</h1>
         <p style={{ color: 'var(--muted)' }}>Share this code with others to play together, or join as a spectator.</p>
+        {returningSeat && (
+          <p style={{ color: 'var(--accent)', fontWeight: 600, marginTop: -4 }}>Welcome back! Continue below as {seatLabel(returningSeat)}.</p>
+        )}
         <label style={{ display: 'block', marginBottom: 12 }}>
           <span style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>Your name (optional)</span>
           <input
@@ -48,15 +57,20 @@ export function LobbyView({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
           {seats.map((seat) => {
             const occupant = connection.roomInfo?.seats[seat];
+            const isReturning = seat === returningSeat;
             return (
               <button
                 key={seat}
-                className="btn"
+                className={isReturning ? 'btn btn-primary' : 'btn'}
                 disabled={!!occupant}
                 onClick={() => connection.joinAs(seat, email.trim() || undefined, name.trim() || undefined)}
                 style={{ padding: 12, fontSize: 16 }}
               >
-                {occupant ? `${seatLabel(seat)} — taken${occupant.name ? ` by ${occupant.name}` : ''}` : `Join as ${seatLabel(seat)}`}
+                {occupant
+                  ? `${seatLabel(seat)} — taken${occupant.name ? ` by ${occupant.name}` : ''}`
+                  : isReturning
+                    ? `Continue as ${seatLabel(seat)}`
+                    : `Join as ${seatLabel(seat)}`}
               </button>
             );
           })}
