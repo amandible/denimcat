@@ -399,6 +399,28 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return this.module.toView ? this.module.toView(room.gameState, viewer) : room.gameState;
   }
 
+  /**
+   * Re-runs afterMutation (and resends game_state) against the CURRENT
+   * state, independent of any actual mutation — called by roomHandlers.ts
+   * right after a join/reconnect socket has joined its Socket.IO room, so a
+   * game whose afterMutation pushes a targeted per-viewer hint derived from
+   * current state (e.g. Hyper Bloom's legal_moves, computed from whoever
+   * `getActiveSeat` says is active) gets it resynced on arrival too — not
+   * just after the next mutation. Without this, a player reconnecting
+   * mid-turn would see a stale/empty hint (no legal moves highlighted)
+   * until *something* happened to trigger a fresh mutation, which is
+   * exactly the "can't move until I click undo" bug this fixes: clicking
+   * undo was the first mutation to come along and finally repopulate it.
+   * Must run only after the caller's socket has already called
+   * `socket.join(roomCode)` — broadcastState's non-toView branch targets
+   * the whole Socket.IO room, which would otherwise miss a socket that
+   * hasn't joined it yet.
+   */
+  async resyncAfterJoin(code: string): Promise<void> {
+    const room = await this.getRoom(code);
+    if (room) this.broadcastState(room);
+  }
+
   private broadcastState(room: LiveRoom<TState, TSeat>, data?: unknown): void {
     if (!this.module.toView) {
       this.nsp.to(room.code).emit('game_state', room.gameState);

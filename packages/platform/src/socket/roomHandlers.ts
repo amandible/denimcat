@@ -67,10 +67,14 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       .then(async (result) => {
         if (result.ok) {
           socket.join(roomCode);
-          // The broadcast inside joinRoom fired before this socket had
-          // joined the io room, so seed this socket's own initial view.
+          // The broadcasts inside joinRoom fired before this socket had
+          // joined the io room, so seed this socket's own initial view —
+          // and resync any targeted per-viewer hint derived from current
+          // state (e.g. Hyper Bloom's legal_moves), which otherwise stays
+          // stale/empty until the next actual mutation comes along.
           const info = await store.getRoomInfo(roomCode);
           if (info) socket.emit('room_update', info);
+          await store.resyncAfterJoin(roomCode);
         }
         cb(result);
       })
@@ -102,6 +106,7 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
             socket.join(roomCode);
             const info = await store.getRoomInfo(roomCode);
             if (info) socket.emit('room_update', info);
+            await store.resyncAfterJoin(roomCode);
           }
           cb(result);
         })
