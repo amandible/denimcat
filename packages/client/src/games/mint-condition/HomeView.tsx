@@ -3,8 +3,14 @@ import type { PlayerCount } from '@denimcat/engine-mint-condition';
 import { createSocket } from '../../socket';
 import '../../styles/mint-condition.css';
 
-function goToRoom(code: string) {
-  window.location.href = `/mint-condition/room/${code.toUpperCase()}`;
+function goToRoom(code: string, hotseat?: boolean, playerCount?: PlayerCount) {
+  // playerCount is only needed for hotseat — it tells MintConditionRoom how
+  // many seats to auto-join, since a hotseat room otherwise has no way to
+  // know its own seat count before the first join attempt (which would
+  // otherwise try to join every possible seat, failing hard on any that
+  // don't exist for this room's actual player count).
+  const params = hotseat ? `?hotseat=1&players=${playerCount ?? 2}` : '';
+  window.location.href = `/mint-condition/room/${code.toUpperCase()}${params}`;
 }
 
 export function MintConditionHomeView() {
@@ -12,7 +18,7 @@ export function MintConditionHomeView() {
   const [playerCount, setPlayerCount] = useState<PlayerCount>(2);
   const [busy, setBusy] = useState(false);
 
-  function handleCreate() {
+  function handleCreate(hotseat?: boolean) {
     setBusy(true);
     const socket = createSocket('/mint-condition');
     socket.on('connect', () => {
@@ -21,7 +27,7 @@ export function MintConditionHomeView() {
         { playerCount },
         (result: { ok: true; roomCode: string } | { ok: false; error: unknown }) => {
           socket.close();
-          if (result.ok) goToRoom(result.roomCode);
+          if (result.ok) goToRoom(result.roomCode, hotseat, playerCount);
         },
       );
     });
@@ -52,8 +58,11 @@ export function MintConditionHomeView() {
           ))}
         </div>
 
-        <button className="btn btn-primary" onClick={handleCreate} disabled={busy} style={{ width: '100%', padding: 12, fontSize: 16 }}>
+        <button className="btn btn-primary" onClick={() => handleCreate()} disabled={busy} style={{ width: '100%', padding: 12, fontSize: 16 }}>
           Create a room
+        </button>
+        <button className="btn" onClick={() => handleCreate(true)} disabled={busy} style={{ width: '100%', padding: 12, fontSize: 16, marginTop: 8 }}>
+          Play solo (hotseat)
         </button>
         <div style={{ margin: '20px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>or</div>
         <form onSubmit={handleJoin} style={{ display: 'flex', gap: 8 }}>

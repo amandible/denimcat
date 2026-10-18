@@ -2,8 +2,8 @@ import { useCallback } from 'react';
 import type { MintConditionStateView } from '@denimcat/engine-mint-condition';
 import { useRoomConnection } from '../../state/useRoomConnection';
 
-export function useMintConditionActions(roomCode: string) {
-  const connection = useRoomConnection<MintConditionStateView>('mint-condition', '/mint-condition', roomCode);
+export function useMintConditionActions(roomCode: string, options?: { role?: string }) {
+  const connection = useRoomConnection<MintConditionStateView>('mint-condition', '/mint-condition', roomCode, options);
 
   const placeBid = useCallback((cards: number[]) => connection.sendAction('place_bid', { cards }), [connection]);
   const pass = useCallback(() => connection.sendAction('pass'), [connection]);

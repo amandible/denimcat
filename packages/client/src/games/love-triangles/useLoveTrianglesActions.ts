@@ -13,7 +13,7 @@ const HIGHLIGHT_DELAY_MS = 1100;
 /** A short beat after the removal + refill lands before moving on to whatever's queued next. */
 const SETTLE_DELAY_MS = 500;
 
-export function useLoveTrianglesActions(roomCode: string) {
+export function useLoveTrianglesActions(roomCode: string, options?: { role?: string }) {
   const [displayedState, setDisplayedState] = useState<GameState | null>(null);
   const [animating, setAnimating] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<RemovedUnplayableEvent | null>(null);
@@ -63,6 +63,7 @@ export function useLoveTrianglesActions(roomCode: string) {
   );
 
   const connection = useRoomConnection<GameState>('love-triangles', '/love-triangles', roomCode, {
+    ...options,
     extraListeners: { love_triangles_events: handleEvents },
   });
 
