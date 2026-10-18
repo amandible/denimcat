@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { SeatId } from '@denimcat/engine-mint-condition';
 import type { MintConditionConnection } from './useMintConditionActions';
 import { PriceSlotTrack } from './components/PriceSlotTrack';
@@ -9,10 +10,13 @@ import { PrizeChoicePanel } from './components/PrizeChoicePanel';
 import { NewPrizeSlotPicker } from './components/NewPrizeSlotPicker';
 import { ScoreBoard } from './components/ScoreBoard';
 import { PlayerCounts } from './components/PlayerCounts';
+import { RulesContent } from './components/RulesContent';
+import { RulesModal } from '../../components/RulesModal';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: MintConditionConnection }) {
   const { gameState, you } = connection;
+  const [showRules, setShowRules] = useState(false);
   if (!gameState || !you) return null;
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
@@ -33,7 +37,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px', display: 'flex', gap: 28, flexWrap: 'wrap' }}>
       <div style={{ flex: '2 1 420px' }}>
-        <h2 style={{ marginBottom: 10 }}>Room {roomCode}</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+          <h2 style={{ marginBottom: 10 }}>Room {roomCode}</h2>
+          <button className="btn" onClick={() => setShowRules(true)}>
+            Rules
+          </button>
+        </div>
         <PriceSlotTrack slots={gameState.priceSlots} />
         <div style={{ marginTop: 16 }}>
           <AuctionStatusPanel auction={gameState.auction} />
@@ -95,6 +104,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
 
         {connection.lastError && <p style={{ color: 'crimson' }}>{connection.lastError}</p>}
       </div>
+
+      {showRules && (
+        <RulesModal onClose={() => setShowRules(false)}>
+          <RulesContent />
+        </RulesModal>
+      )}
     </main>
   );
 }

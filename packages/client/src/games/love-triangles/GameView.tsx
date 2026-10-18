@@ -5,11 +5,14 @@ import type { LoveTrianglesConnection } from './useLoveTrianglesActions';
 import { MapBoard } from './components/MapBoard';
 import { DisplayTrack } from './components/DisplayTrack';
 import { DiscardList } from './components/DiscardList';
+import { RulesContent } from './components/RulesContent';
+import { RulesModal } from '../../components/RulesModal';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: LoveTrianglesConnection }) {
   const { gameState, you, pendingRemoval, animating } = connection;
   const [hoveredLinkId, setHoveredLinkId] = useState<LinkId | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   // A display slot can be refilled with a different card while the mouse
   // never leaves that slot's button (no mouseenter/mouseleave fires from a
@@ -30,7 +33,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px', display: 'flex', gap: 28, flexWrap: 'wrap' }}>
       <div style={{ flex: '2 1 420px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-        <h2 style={{ alignSelf: 'flex-start', marginBottom: 0 }}>Room {roomCode}</h2>
+        <div style={{ alignSelf: 'stretch', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+          <h2 style={{ marginBottom: 0 }}>Room {roomCode}</h2>
+          <button className="btn" onClick={() => setShowRules(true)}>
+            Rules
+          </button>
+        </div>
         <MapBoard
           state={gameState}
           crossingLinkIds={pendingRemoval?.crossedLinks ?? []}
@@ -109,6 +117,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
 
         {connection.lastError && <p style={{ color: 'crimson' }}>{connection.lastError}</p>}
       </div>
+
+      {showRules && (
+        <RulesModal onClose={() => setShowRules(false)}>
+          <RulesContent />
+        </RulesModal>
+      )}
     </main>
   );
 }
