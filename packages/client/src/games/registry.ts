@@ -30,10 +30,8 @@ export const GAMES: GameDescriptor[] = [
     namespace: '/tashkalar',
     tagline: 'Testing fan factions',
   },
-  {
-    slug: 'kingsgate',
-    displayName: "King's Gate",
-    namespace: '/kingsgate',
-    tagline: 'A 3-4 player tile-laying game of feuding lords.',
-  },
+  // King's Gate is built but not currently on the game-select screen — not
+  // being actively followed up on for now. Its code (engine/server/client
+  // under private-games/other-games, plus App.tsx's routing) is untouched,
+  // so re-adding this entry is all it takes to bring it back.
 ];
