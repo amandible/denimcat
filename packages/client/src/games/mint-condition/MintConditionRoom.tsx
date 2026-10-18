@@ -1,6 +1,7 @@
-import type { PlayerCount } from '@denimcat/engine-mint-condition';
+import type { MintConditionStateView, PlayerCount } from '@denimcat/engine-mint-condition';
 import { HotseatRoom } from '../../views/HotseatRoom';
 import { LobbyView } from '../../views/LobbyView';
+import { useDocumentTitle } from '../../state/useDocumentTitle';
 import { useMintConditionActions } from './useMintConditionActions';
 import { GameView } from './GameView';
 import { CANDIDATE_SEATS, seatLabel } from './seats';
@@ -8,6 +9,14 @@ import '../../styles/mint-condition.css';
 
 function isPlayerCount(value: number): value is PlayerCount {
   return value === 2 || value === 3 || value === 4;
+}
+
+function getTurnSeat(gameState: MintConditionStateView) {
+  return gameState.phase === 'auction-active'
+    ? gameState.auction.activeSeat
+    : gameState.phase === 'awaiting-prize-choice' || gameState.phase === 'awaiting-new-prize-placement'
+      ? gameState.auction.winnerSeat
+      : null;
 }
 
 export function MintConditionRoom({ roomCode }: { roomCode: string }) {
@@ -28,13 +37,7 @@ export function MintConditionRoom({ roomCode }: { roomCode: string }) {
         candidateSeats={CANDIDATE_SEATS.slice(0, playerCount)}
         seatLabel={seatLabel as (seat: string) => string}
         GameView={GameView}
-        getTurnSeat={(gameState) =>
-          gameState.phase === 'auction-active'
-            ? gameState.auction.activeSeat
-            : gameState.phase === 'awaiting-prize-choice' || gameState.phase === 'awaiting-new-prize-placement'
-              ? gameState.auction.winnerSeat
-              : null
-        }
+        getTurnSeat={getTurnSeat}
       />
     );
   }
@@ -44,6 +47,7 @@ export function MintConditionRoom({ roomCode }: { roomCode: string }) {
 
 function NormalMintConditionRoom({ roomCode }: { roomCode: string }) {
   const connection = useMintConditionActions(roomCode);
+  useDocumentTitle('Mint Condition', connection, getTurnSeat);
 
   if (connection.status === 'connecting') {
     return <Centered>Connecting…</Centered>;

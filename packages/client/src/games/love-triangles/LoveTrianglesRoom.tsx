@@ -1,10 +1,15 @@
-import type { PlayerCount } from '@denimcat/engine-love-triangles';
+import type { GameState, PlayerCount } from '@denimcat/engine-love-triangles';
 import { HotseatRoom } from '../../views/HotseatRoom';
 import { LobbyView } from '../../views/LobbyView';
+import { useDocumentTitle } from '../../state/useDocumentTitle';
 import { useLoveTrianglesActions } from './useLoveTrianglesActions';
 import { GameView } from './GameView';
 import { CANDIDATE_SEATS, seatLabel } from './seats';
 import '../../styles/love-triangles.css';
+
+function getTurnSeat(gameState: GameState) {
+  return gameState.phase === 'ended' ? null : gameState.activeSeat;
+}
 
 function isPlayerCount(value: number): value is PlayerCount {
   return value === 2 || value === 3 || value === 4;
@@ -28,7 +33,7 @@ export function LoveTrianglesRoom({ roomCode }: { roomCode: string }) {
         candidateSeats={CANDIDATE_SEATS.slice(0, playerCount)}
         seatLabel={seatLabel as (seat: string) => string}
         GameView={GameView}
-        getTurnSeat={(gameState) => (gameState.phase === 'ended' ? null : gameState.activeSeat)}
+        getTurnSeat={getTurnSeat}
       />
     );
   }
@@ -38,6 +43,7 @@ export function LoveTrianglesRoom({ roomCode }: { roomCode: string }) {
 
 function NormalLoveTrianglesRoom({ roomCode }: { roomCode: string }) {
   const connection = useLoveTrianglesActions(roomCode);
+  useDocumentTitle('Love Triangles', connection, getTurnSeat);
 
   if (connection.status === 'connecting') {
     return <Centered>Connecting…</Centered>;
