@@ -186,31 +186,7 @@ export function useRoomConnection<TView>(
       socket.on(event, handler);
     }
 
-    // Reports whether this tab is actively foregrounded (see `set_presence`
-    // in the shared contract) so RoomStore can tell the difference between
-    // "connected and actually watching" (suppress turn-notification emails)
-    // and "connected but the tab's just been left open in the background"
-    // (send them anyway). A brief tab-switch doesn't count as away — only
-    // backgrounded continuously past AWAY_DELAY_MS does, so this never fires
-    // for someone actively playing and glancing elsewhere for a few seconds.
-    const AWAY_DELAY_MS = 2 * 60 * 1000;
-    let awayTimer: ReturnType<typeof setTimeout> | null = null;
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'hidden') {
-        awayTimer = setTimeout(() => socket.emit('set_presence', { roomCode, away: true }), AWAY_DELAY_MS);
-      } else {
-        if (awayTimer) {
-          clearTimeout(awayTimer);
-          awayTimer = null;
-        }
-        socket.emit('set_presence', { roomCode, away: false });
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (awayTimer) clearTimeout(awayTimer);
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

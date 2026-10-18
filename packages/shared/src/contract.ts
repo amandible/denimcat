@@ -51,18 +51,6 @@ export interface RoomLifecycleClientToServerEvents<TSeat extends string, TConfig
     cb: (res: JoinResult<TSeat, TView>) => void,
   ) => void;
   leave_seat: (payload: { roomCode: string }, cb: (res: { ok: true }) => void) => void;
-  /**
-   * Fire-and-forget presence hint (no ack) — lets a client tell the server
-   * whether its tab is actively foregrounded (`away: false`) or has been
-   * backgrounded long enough to treat as unattended (`away: true`), purely
-   * to decide whether RoomStore's async-play turn-notification email should
-   * fire for an otherwise-still-connected seat: a live player with the tab
-   * foregrounded shouldn't be emailed about their own game, but one who
-   * leaves the tab open in the background while playing async should still
-   * get reminded. Ephemeral — never persisted, and reset to "present" on
-   * every reconnect/join (see RoomStore.setPresence).
-   */
-  set_presence: (payload: { roomCode: string; away: boolean }) => void;
 }
 
 export interface RoomLifecycleServerToClientEvents<TSeat extends string, TView> {

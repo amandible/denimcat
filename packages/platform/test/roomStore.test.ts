@@ -194,80 +194,27 @@ describe('RoomStore async-play turn notifications', () => {
     store.stop();
   });
 
-  it('does not email a seat that is still connected', async () => {
-    const repo = await seedTurnRepo('CCCC', {
-      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
-      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
-    });
-    const sender = fakeEmailSender();
-    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
-
-    await store.reconnectRoom('CCCC', 'p1', 'tok-1', 'socket-1');
-    await store.reconnectRoom('CCCC', 'p2', 'tok-2', 'socket-2'); // p2 IS connected
-    await store.applyAction('CCCC', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
-
-    expect(sender.calls).toHaveLength(0);
-    store.stop();
-  });
-
   it(
-    'DOES email a connected seat once it has reported itself "away" via setPresence — a tab left open ' +
-      "in the background shouldn't suppress the reminder just because its socket is technically still up",
+    'DOES email a seat that is still actively connected, as long as it has an email on file — ' +
+      'deliberately not trying to guess whether the tab is actively watched (see notifyTurn\'s ' +
+      'doc comment): supplying an email at all is already a strong, deliberate async-play signal',
     async () => {
-      const repo = await seedTurnRepo('CCC2', {
+      const repo = await seedTurnRepo('CCCC', {
         p1: { seatToken: 'tok-1', email: 'p1@example.com' },
         p2: { seatToken: 'tok-2', email: 'p2@example.com' },
       });
       const sender = fakeEmailSender();
       const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
 
-      await store.reconnectRoom('CCC2', 'p1', 'tok-1', 'socket-1');
-      await store.reconnectRoom('CCC2', 'p2', 'tok-2', 'socket-2'); // p2 connected but...
-      await store.setPresence('CCC2', 'socket-2', true); // ...backgrounded long enough to report away
-      await store.applyAction('CCC2', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+      await store.reconnectRoom('CCCC', 'p1', 'tok-1', 'socket-1');
+      await store.reconnectRoom('CCCC', 'p2', 'tok-2', 'socket-2'); // p2 IS connected
+      await store.applyAction('CCCC', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
 
       expect(sender.calls).toHaveLength(1);
       expect(sender.calls[0].to).toBe('p2@example.com');
       store.stop();
     },
   );
-
-  it('suppresses the email again once an away seat reports itself present via setPresence', async () => {
-    const repo = await seedTurnRepo('CCC3', {
-      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
-      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
-    });
-    const sender = fakeEmailSender();
-    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
-
-    await store.reconnectRoom('CCC3', 'p1', 'tok-1', 'socket-1');
-    await store.reconnectRoom('CCC3', 'p2', 'tok-2', 'socket-2');
-    await store.setPresence('CCC3', 'socket-2', true); // backgrounded...
-    await store.setPresence('CCC3', 'socket-2', false); // ...then foregrounded again before p1 moves
-    await store.applyAction('CCC3', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
-
-    expect(sender.calls).toHaveLength(0);
-    store.stop();
-  });
-
-  it('a fresh reconnect always resets a seat back to "present", even if it was away before disconnecting', async () => {
-    const repo = await seedTurnRepo('CCC4', {
-      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
-      p2: { seatToken: 'tok-2', email: 'p2@example.com' },
-    });
-    const sender = fakeEmailSender();
-    const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), { emailSender: sender });
-
-    await store.reconnectRoom('CCC4', 'p1', 'tok-1', 'socket-1');
-    await store.reconnectRoom('CCC4', 'p2', 'tok-2', 'socket-2a');
-    await store.setPresence('CCC4', 'socket-2a', true);
-    await store.handleDisconnect('socket-2a');
-    await store.reconnectRoom('CCC4', 'p2', 'tok-2', 'socket-2b'); // reconnects on a new socket — presence resets
-    await store.applyAction('CCC4', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
-
-    expect(sender.calls).toHaveLength(0); // connected and no longer marked away
-    store.stop();
-  });
 
   it('does not email a seat with no email on file', async () => {
     const repo = await seedTurnRepo('DDDD', {

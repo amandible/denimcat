@@ -135,14 +135,4 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       });
   });
 
-  // Fire-and-forget (no ack) — a malformed or out-of-order payload is simply
-  // dropped, never surfaced as an error, since this is just a hint toward a
-  // "should we still email them" decision, not something the sender needs
-  // to know the outcome of.
-  socket.on('set_presence', (payload: { roomCode?: unknown; away?: unknown }) => {
-    if (!payload || !isNonEmptyString(payload.roomCode) || typeof payload.away !== 'boolean') return;
-    store.setPresence(payload.roomCode, socket.id, payload.away).catch((error) => {
-      console.error('[socket] set_presence failed:', error);
-    });
-  });
 }
