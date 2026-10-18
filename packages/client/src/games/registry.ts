@@ -22,7 +22,7 @@ export const GAMES: GameDescriptor[] = [
     slug: 'love-triangles',
     displayName: 'Love Triangles',
     namespace: '/love-triangles',
-    tagline: 'Playing gems to claim lines.',
+    tagline: 'Claim lines to form loops.',
   },
   {
     slug: 'tashkalar',
