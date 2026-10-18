@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RoomConnection } from '../state/useRoomConnection';
 
 export function LobbyView({
@@ -23,13 +23,23 @@ export function LobbyView({
   const returningSeat =
     connection.previousRole && !connection.roomInfo?.seats[connection.previousRole] ? connection.previousRole : null;
 
+  // Offer back whatever name this browser typed in last time it joined that
+  // seat, if any — see StoredSeat.name's doc comment. Still freely editable;
+  // this is just a convenience so a returning player isn't asked to
+  // re-introduce themselves to a room they're already in.
+  useEffect(() => {
+    if (connection.previousName) setName(connection.previousName);
+  }, [connection.previousName]);
+
   return (
     <main style={{ maxWidth: 420, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
       <div className="panel" style={{ width: '100%' }}>
         <h1>Room {roomCode}</h1>
         <p style={{ color: 'var(--muted)' }}>Share this code with others to play together, or join as a spectator.</p>
         {returningSeat && (
-          <p style={{ color: 'var(--accent)', fontWeight: 600, marginTop: -4 }}>Welcome back! Continue below as {seatLabel(returningSeat)}.</p>
+          <p style={{ color: 'var(--accent)', fontWeight: 600, marginTop: -4 }}>
+            Welcome back{connection.previousName ? `, ${connection.previousName}` : ''}! Continue below as {seatLabel(returningSeat)}.
+          </p>
         )}
         <label style={{ display: 'block', marginBottom: 12 }}>
           <span style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>Your name (optional)</span>

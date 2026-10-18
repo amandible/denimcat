@@ -1,6 +1,8 @@
 export interface StoredSeat {
   role: string;
   seatToken: string;
+  /** Whatever the player typed into "Your name" the last time they joined this seat from this browser, if anything — purely so a later "welcome back" prompt (see RoomConnection.previousName) can offer it back, never sent anywhere on its own. */
+  name?: string;
 }
 
 function storageKey(gameSlug: string, roomCode: string): string {

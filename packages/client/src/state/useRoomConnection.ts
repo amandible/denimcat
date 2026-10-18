@@ -12,7 +12,7 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:4000';
  * touches nothing) when either param is absent — the normal case for every
  * other page load.
  */
-function consumeReconnectLinkParams(): { role: string; seatToken: string } | null {
+function consumeReconnectLinkParams(): { role: string; seatToken: string; name?: string } | null {
   const params = new URLSearchParams(window.location.search);
   const role = params.get('seat');
   const seatToken = params.get('token');
@@ -53,6 +53,8 @@ export interface RoomConnection<TView> {
    * actually worked, or this is hotseat mode).
    */
   previousRole: string | null;
+  /** Whatever name this browser last typed in for `previousRole` in this room, if any — see StoredSeat.name's doc comment. Null whenever `previousRole` is, and also null if a name was simply never given. */
+  previousName: string | null;
   joinAs: (role: string, email?: string, name?: string) => void;
   leaveSeat: () => void;
   /** Generic action escape hatch: emits `event` with `{roomCode, ...payload}` and just surfaces any error. */
@@ -79,6 +81,7 @@ export function useRoomConnection<TView>(
   const [roomInfo, setRoomInfo] = useState<RoomInfo | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [previousRole, setPreviousRole] = useState<string | null>(null);
+  const [previousName, setPreviousName] = useState<string | null>(null);
   const extraListenersRef = useRef(options.extraListeners);
   extraListenersRef.current = options.extraListeners;
   // A fixed role, used only by hotseat mode (one tab, N seats): this
@@ -134,16 +137,21 @@ export function useRoomConnection<TView>(
           setStatus('in-room');
           setLastError(null);
           // Persist regardless of source, so a link-based reconnect also
-          // works normally (no link needed) on future visits from this browser.
-          saveSeat(gameSlug, roomCode, { role: stored.role, seatToken: stored.seatToken });
+          // works normally (no link needed) on future visits from this
+          // browser — carrying the remembered name (if any) forward too, so
+          // it's still there for a *later* welcome-back prompt rather than
+          // getting silently dropped on every successful reconnect.
+          saveSeat(gameSlug, roomCode, { role: stored.role, seatToken: stored.seatToken, name: stored.name });
         } else {
           // The stored token no longer works — almost always because this
           // seat's reconnect grace already lapsed (see RoomStore.expireSeat)
           // before this later visit, the normal case after any real gap in
-          // async play, not a sign anything went wrong. The role itself is
-          // still worth remembering for the picking-role screen about to
-          // show: this browser isn't a stranger to that seat.
+          // async play, not a sign anything went wrong. The role (and name,
+          // if this browser ever gave one) is still worth remembering for
+          // the picking-role screen about to show: this player isn't a
+          // stranger to that seat.
           setPreviousRole(stored.role);
+          setPreviousName(stored.name ?? null);
           clearSeat(gameSlug, roomCode);
           // Suppress the raw "seat token does not match" wording for the
           // expected case (lapsed grace) — the picking-role screen already
@@ -220,8 +228,9 @@ export function useRoomConnection<TView>(
         setStatus('in-room');
         setLastError(null);
         setPreviousRole(null);
+        setPreviousName(null);
         if (res.seatToken && role !== 'spectator') {
-          saveSeat(gameSlug, roomCode, { role, seatToken: res.seatToken });
+          saveSeat(gameSlug, roomCode, { role, seatToken: res.seatToken, name });
         }
       });
     },
@@ -247,5 +256,5 @@ export function useRoomConnection<TView>(
     [roomCode],
   );
 
-  return { status, you, gameState, roomInfo, lastError, previousRole, joinAs, leaveSeat, sendAction };
+  return { status, you, gameState, roomInfo, lastError, previousRole, previousName, joinAs, leaveSeat, sendAction };
 }
