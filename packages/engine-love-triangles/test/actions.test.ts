@@ -16,6 +16,14 @@ describe('pass', () => {
     const state = makeState({ seats: ['p1', 'p2'], activeSeat: 'p1' });
     expect(pass(state, 'p2').ok).toBe(false);
   });
+
+  it('appends a log entry', () => {
+    const state = makeState({ seats: ['p1', 'p2'], activeSeat: 'p1' });
+    const result = pass(state, 'p1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.log.at(-1)).toContain('p1 passed');
+  });
 });
 
 describe('buyLink', () => {
@@ -41,6 +49,8 @@ describe('buyLink', () => {
     // No crossings triggered here, so just the purchase + its immediate refill.
     expect(result.data?.events.map((e) => e.kind)).toEqual(['purchased', 'refilled']);
     expect(result.data?.events[result.data.events.length - 1].state).toEqual(result.state);
+
+    expect(result.state.log.at(-1)).toBe('p1 bought A-B for 4 gems.');
   });
 
   it('logs an ordered event for the purchase and each cascade removal it triggers', () => {

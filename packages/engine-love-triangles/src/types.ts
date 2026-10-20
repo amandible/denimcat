@@ -33,6 +33,8 @@ export interface GameState {
   winner: SeatId[] | null;
   /** Links removed from the game after becoming unplayable (crossed an already-drawn line) — public, so players can see what's gone. */
   discardPile: LinkId[];
+  /** Human-readable play-by-play, newest entries last — see state.ts's pushLog. Public (there's no hidden information in this game), capped at MAX_LOG_ENTRIES. */
+  log: string[];
 }
 
 export type { EngineError } from '@denimcat/shared';

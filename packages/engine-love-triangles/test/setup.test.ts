@@ -36,4 +36,9 @@ describe('dealGame', () => {
     expect(state.turnOrder).toEqual(state.seats);
     expect(state.phase).toBe('playing');
   });
+
+  it('logs a game-start entry', () => {
+    const state = dealGame(3, fakeRng());
+    expect(state.log).toEqual(['Game started with 3 players: p1, p2, p3.']);
+  });
 });

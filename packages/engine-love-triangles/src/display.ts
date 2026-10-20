@@ -1,7 +1,7 @@
 import type { GameState, LinkId, SeatId } from './types';
 import type { RemovedUnplayableEvent } from './events';
 import { CROSSES } from './geometry';
-import { cloneState } from './state';
+import { cloneState, pushLog } from './state';
 
 /** Promotes bottom-row cards into empty top-row slots, then draws new bottom-row cards where the deck allows. */
 export function refillDisplay(state: GameState): GameState {
@@ -56,6 +56,12 @@ export function sweepUnplayable(state: GameState): { state: GameState; events: R
     if (found.row === 'top') next.topRow[found.index] = null;
     else next.bottomRow[found.index] = null;
     next.discardPile = [...next.discardPile, found.id];
+
+    const paidSeats = Object.keys(paidTo) as SeatId[];
+    pushLog(
+      next,
+      `${found.id} became unplayable and was removed${paidSeats.length > 0 ? ` (1 gem to ${paidSeats.join(', ')})` : ''}.`,
+    );
 
     next = refillDisplay(next);
     events.push({ kind: 'removed_unplayable', linkId: found.id, crossedLinks: [...crossedLinks], paidTo, state: next });

@@ -1,5 +1,6 @@
 import type { GameState, LinkId, NodeId, SeatId } from './types';
 import { LINKS } from './maps/map1';
+import { cloneState, pushLog } from './state';
 
 function buildAdjacency(ownedLinks: LinkId[]): Partial<Record<NodeId, NodeId[]>> {
   const adjacency: Partial<Record<NodeId, NodeId[]>> = {};
@@ -133,5 +134,9 @@ export function isGameOver(state: GameState): boolean {
 
 export function applyGameEndIfDone(state: GameState): GameState {
   if (!isGameOver(state)) return state;
-  return { ...state, phase: 'ended', winner: determineWinners(state) };
+  const next = cloneState(state);
+  next.phase = 'ended';
+  next.winner = determineWinners(state);
+  pushLog(next, next.winner.length > 1 ? `Shared victory: ${next.winner.join(', ')}.` : `${next.winner[0]} wins!`);
+  return next;
 }

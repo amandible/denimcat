@@ -122,4 +122,9 @@ describe('dealGame', () => {
     expect(state.auction.activeSeat).toBe('p1');
     expect(state.phase).toBe('auction-active');
   });
+
+  it('logs a game-start entry', () => {
+    const state = dealGame(3, () => 0.5);
+    expect(state.log).toEqual(['Game started with 3 players: p1, p2, p3.']);
+  });
 });

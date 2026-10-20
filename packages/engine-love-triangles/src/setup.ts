@@ -1,6 +1,6 @@
 import type { GameState, PlayerCount, PlayerState, SeatId } from './types';
 import { LINKS } from './maps/map1';
-import { shuffle } from './state';
+import { pushLog, shuffle } from './state';
 
 const SEATS_BY_COUNT: Record<PlayerCount, SeatId[]> = {
   2: ['p1', 'p2'],
@@ -22,7 +22,7 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     players[seat] = player;
   });
 
-  return {
+  const state: GameState = {
     seats,
     players,
     topRow,
@@ -34,5 +34,8 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     phase: 'playing',
     winner: null,
     discardPile: [],
+    log: [],
   };
+  pushLog(state, `Game started with ${seats.length} players: ${seats.join(', ')}.`);
+  return state;
 }

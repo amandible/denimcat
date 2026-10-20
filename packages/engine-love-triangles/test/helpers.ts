@@ -16,6 +16,7 @@ export function makeState(
     phase?: GameState['phase'];
     winner?: SeatId[] | null;
     discardPile?: LinkId[];
+    log?: string[];
   } = {},
 ): GameState {
   const seats = overrides.seats ?? ['p1', 'p2'];
@@ -34,5 +35,6 @@ export function makeState(
     phase: overrides.phase ?? 'playing',
     winner: overrides.winner ?? null,
     discardPile: overrides.discardPile ?? [],
+    log: overrides.log ?? [],
   };
 }

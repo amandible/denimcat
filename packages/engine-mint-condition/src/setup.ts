@@ -1,5 +1,5 @@
 import type { GameState, PlayerCount, PlayerState, PrizeCard, PrizeColor, SeatId } from './types';
-import { shuffle, startAuction } from './state';
+import { pushLog, shuffle, startAuction } from './state';
 
 const SEATS_BY_COUNT: Record<PlayerCount, SeatId[]> = {
   2: ['p1', 'p2'],
@@ -163,7 +163,7 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
   // intuitive than a coin flip nobody can see the result of ahead of time.
   const openerSeat = seats[0];
 
-  return {
+  const state: GameState = {
     seats,
     players,
     priceSlots,
@@ -174,5 +174,8 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     winner: null,
     unlockedUpperSlots: [],
     discardPile: [],
+    log: [],
   };
+  pushLog(state, `Game started with ${seats.length} players: ${seats.join(', ')}.`);
+  return state;
 }

@@ -29,7 +29,18 @@ export function cloneState(state: GameState): GameState {
     phase: state.phase,
     winner: state.winner ? [...state.winner] : null,
     discardPile: [...state.discardPile],
+    log: [...state.log],
   };
+}
+
+export const MAX_LOG_ENTRIES = 300;
+
+/** Appends one human-readable play-by-play line — see GameState.log's doc comment. Mutates in place; caller is expected to already be working on a clone (or brand-new state). */
+export function pushLog(state: GameState, message: string): void {
+  state.log.push(message);
+  if (state.log.length > MAX_LOG_ENTRIES) {
+    state.log.splice(0, state.log.length - MAX_LOG_ENTRIES);
+  }
 }
 
 /** Fixed round-robin: the next seat after `activeSeat` in `turnOrder`, wrapping around. */

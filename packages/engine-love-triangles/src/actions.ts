@@ -1,7 +1,7 @@
 import type { EngineResult, SeatId } from './types';
 import type { GameState, LinkId } from './types';
 import type { LoveTrianglesEvent } from './events';
-import { cloneState, nextSeat } from './state';
+import { cloneState, nextSeat, pushLog } from './state';
 import { refillDisplay, sweepUnplayable } from './display';
 import { effectiveCost } from './presence';
 import { applyGameEndIfDone } from './scoring';
@@ -21,6 +21,7 @@ export function pass(state: GameState, seat: SeatId): EngineResult {
   const next = cloneState(state);
   next.players[seat].gems += 2;
   next.activeSeat = nextSeat(next.turnOrder, seat);
+  pushLog(next, `${seat} passed (+2 gems).`);
   return ok(next);
 }
 
@@ -45,6 +46,7 @@ export function buyLink(state: GameState, seat: SeatId, linkId: LinkId): EngineR
   }
   next.players[seat].ownedLinks = [...next.players[seat].ownedLinks, linkId];
   next.topRow[slotIndex] = null;
+  pushLog(next, `${seat} bought ${linkId} for ${cost.total} gems.`);
 
   const events: LoveTrianglesEvent[] = [{ kind: 'purchased', seat, linkId, cost, state: next }];
 

@@ -74,6 +74,8 @@ export interface GameState {
    * slot nobody can afford yet.
    */
   unlockedUpperSlots: number[];
+  /** Human-readable play-by-play, newest entries last — see state.ts's pushLog. Public (bid amounts and prize choices are already public; only hands/decks are hidden), capped at MAX_LOG_ENTRIES. */
+  log: string[];
 }
 
 export type { EngineError } from '@denimcat/shared';

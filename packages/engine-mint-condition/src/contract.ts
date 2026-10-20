@@ -45,6 +45,8 @@ export interface MintConditionStateView {
   unlockedUpperSlots: number[];
   /** Prizes permanently removed from the game after pricing up too high — public. */
   discardPile: PrizeCard[];
+  /** Human-readable play-by-play, newest entries last — see GameState.log's doc comment. */
+  log: string[];
 }
 
 /**
@@ -86,6 +88,7 @@ export function toView(state: GameState, viewer: SeatId | 'spectator'): MintCond
     winner: state.winner ? [...state.winner] : null,
     unlockedUpperSlots: [...state.unlockedUpperSlots],
     discardPile: state.discardPile.map((p) => ({ ...p })),
+    log: [...state.log],
   };
 }
 

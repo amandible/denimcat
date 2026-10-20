@@ -1,5 +1,5 @@
 import type { EngineResult, GameState, SeatId } from './types';
-import { cloneState, startAuction } from './state';
+import { cloneState, pushLog, startAuction } from './state';
 import { ok, err } from './result';
 import { shiftDisplay } from './prizes';
 import { applyGameEndIfDone } from './scoring';
@@ -98,6 +98,7 @@ export function placeBid(state: GameState, seat: SeatId, cards: number[]): Engin
 
   let next = cloneState(state);
   next.auction.highestBid = { seat, cardValues: [...cards].sort((a, b) => a - b), amount };
+  pushLog(next, `${seat} bid ${amount}.`);
   next = advanceAuction(next);
   return ok(next);
 }
@@ -108,6 +109,7 @@ export function pass(state: GameState, seat: SeatId): EngineResult {
 
   let next = cloneState(state);
   next.auction.passedSeats = [...next.auction.passedSeats, seat];
+  pushLog(next, `${seat} passed.`);
   next = advanceAuction(next);
   return ok(next);
 }
@@ -120,6 +122,7 @@ export function resolveAuctionWin(state: GameState): GameState {
   const player = next.players[bid.seat];
   player.hand = player.hand.filter((c) => !bid.cardValues.includes(c));
   next.phase = 'awaiting-prize-choice';
+  pushLog(next, `${bid.seat} won the auction for ${bid.amount}.`);
   return next;
 }
 
@@ -130,6 +133,7 @@ export function resolveAuctionWin(state: GameState): GameState {
  */
 export function resolveAuctionNoWinner(state: GameState): GameState {
   let next = shiftDisplay(state);
+  pushLog(next, 'Nobody bid — the auction closed with no winner.');
   next = applyGameEndIfDone(next);
   if (next.phase === 'ended') return next;
 

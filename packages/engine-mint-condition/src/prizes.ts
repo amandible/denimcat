@@ -1,5 +1,5 @@
 import type { EngineResult, GameState, SeatId } from './types';
-import { cloneState, startAuction } from './state';
+import { cloneState, pushLog, startAuction } from './state';
 import { ok, err } from './result';
 import { drawPostAuctionCards } from './decks';
 import { applyGameEndIfDone } from './scoring';
@@ -99,6 +99,7 @@ export function takePrize(state: GameState, seat: SeatId, prizeId: string): Engi
   const prize = slot.prizes.find((p) => p.id === prizeId)!;
   slot.prizes = slot.prizes.filter((p) => p.id !== prizeId);
   next.players[seat].wonPrizes = [...next.players[seat].wonPrizes, prize];
+  pushLog(next, `${seat} took the ${prize.color} ${prize.points}-point prize.`);
 
   return ok(afterPrizeChoice(next));
 }
@@ -125,7 +126,9 @@ export function skipPrizeChoice(state: GameState, seat: SeatId): EngineResult {
     return err('AFFORDABLE_PRIZE_AVAILABLE', 'At least one displayed prize is affordable and must be taken instead.');
   }
 
-  return ok(afterPrizeChoice(cloneState(state)));
+  const next = cloneState(state);
+  pushLog(next, `${seat} took no prize this round.`);
+  return ok(afterPrizeChoice(next));
 }
 
 export function placeNewPrize(state: GameState, seat: SeatId, slotIndex: number): EngineResult {
@@ -154,6 +157,7 @@ export function placeNewPrize(state: GameState, seat: SeatId, slotIndex: number)
   const revealed = next.revealedPrize as NonNullable<GameState['revealedPrize']>;
   next.revealedPrize = null;
   next.priceSlots[slotIndex].prizes = [...next.priceSlots[slotIndex].prizes, revealed];
+  pushLog(next, `${seat} placed the new ${revealed.color} ${revealed.points}-point prize into the ${next.priceSlots[slotIndex].price}-price slot.`);
 
   return ok(concludeAuction(next));
 }

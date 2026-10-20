@@ -36,6 +36,7 @@ export function makeState(
     winner?: SeatId[] | null;
     unlockedUpperSlots?: number[];
     discardPile?: PrizeCard[];
+    log?: string[];
   } = {},
 ): GameState {
   const seats = overrides.seats ?? ['p1', 'p2'];
@@ -54,5 +55,6 @@ export function makeState(
     winner: overrides.winner ?? null,
     unlockedUpperSlots: overrides.unlockedUpperSlots ?? [4, 5],
     discardPile: overrides.discardPile ?? [],
+    log: overrides.log ?? [],
   };
 }

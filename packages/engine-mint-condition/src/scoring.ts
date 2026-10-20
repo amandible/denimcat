@@ -1,5 +1,5 @@
 import type { GameState, PrizeCard, SeatId } from './types';
-import { cloneState } from './state';
+import { cloneState, pushLog } from './state';
 
 export interface ScoreBreakdown {
   base: number;
@@ -47,5 +47,6 @@ export function applyGameEndIfDone(state: GameState): GameState {
   const next = cloneState(state);
   next.phase = 'ended';
   next.winner = determineWinners(next);
+  pushLog(next, next.winner.length > 1 ? `Shared victory: ${next.winner.join(', ')}.` : `${next.winner[0]} wins!`);
   return next;
 }

@@ -91,6 +91,10 @@ describe('placeBid', () => {
     if (!passed.ok) return;
     expect(passed.state.phase).toBe('awaiting-prize-choice');
     expect(passed.state.auction.winnerSeat).toBe('p1');
+
+    expect(passed.state.log).toEqual(
+      expect.arrayContaining(['p1 bid 5.', 'p2 passed.', 'p1 won the auction for 5.']),
+    );
   });
 });
 

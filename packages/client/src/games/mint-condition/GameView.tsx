@@ -12,6 +12,7 @@ import { ScoreBoard } from './components/ScoreBoard';
 import { PlayerCounts } from './components/PlayerCounts';
 import { RulesContent } from './components/RulesContent';
 import { RulesModal } from '../../components/RulesModal';
+import { LogPanel } from '../../components/LogPanel';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: MintConditionConnection }) {
@@ -100,6 +101,10 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
 
         <div style={{ marginTop: 16 }}>
           <ScoreBoard state={gameState} />
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <LogPanel entries={gameState.log} />
         </div>
 
         {connection.lastError && <p style={{ color: 'crimson' }}>{connection.lastError}</p>}

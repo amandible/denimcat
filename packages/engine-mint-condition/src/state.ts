@@ -67,5 +67,16 @@ export function cloneState(state: GameState): GameState {
     winner: state.winner ? [...state.winner] : null,
     unlockedUpperSlots: [...state.unlockedUpperSlots],
     discardPile: state.discardPile.map((p) => ({ ...p })),
+    log: [...state.log],
   };
+}
+
+export const MAX_LOG_ENTRIES = 300;
+
+/** Appends one human-readable play-by-play line — see GameState.log's doc comment. Mutates in place; caller is expected to already be working on a clone (or brand-new state). */
+export function pushLog(state: GameState, message: string): void {
+  state.log.push(message);
+  if (state.log.length > MAX_LOG_ENTRIES) {
+    state.log.splice(0, state.log.length - MAX_LOG_ENTRIES);
+  }
 }
