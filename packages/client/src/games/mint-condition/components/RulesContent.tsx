@@ -13,21 +13,7 @@ export function RulesContent() {
       <p>The players will compete, over a series of auctions, to buy prize cards.</p>
 
       <h4>Setup</h4>
-      <p>At the start of the game, the six price slots are set up. This is done by taking another 1-13 set of cards:</p>
-      <ul style={{ marginTop: 4 }}>
-        <li>Draw three cards from the deck; these, taken individually, will be three of the prices.</li>
-        <li>Draw two cards and add them together. This will be another price.</li>
-        <li>Draw two more cards and add them together. This will be a fifth price.</li>
-        <li>
-          Draw three cards and add them together; if that is not yet the highest price on the table, draw a
-          fourth card and add it as well. That will be the sixth price.
-        </li>
-      </ul>
-      <p>
-        Repeated prices aren't allowed; if one would happen (which is possible in the later steps), those
-        cards go back and get redrawn before proceeding to the next step. Prices are arranged from highest to
-        lowest.
-      </p>
+      <p>At the start of the game, the six price slots are set up semi-randomly and arranged from low to high.</p>
       <p>
         Three prizes are drawn and placed in the second, third, and fourth price slots. (Each slot can hold
         one or more prizes, or be empty.) Each player draws two cards from their money deck. The game begins.
