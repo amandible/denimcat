@@ -12,6 +12,13 @@ export {
 } from './rooms/roomRepository';
 export { generateRoomCode } from './rooms/roomCode';
 export { getDb, ensureSchema } from './db/client';
+export {
+  type AuthRepository,
+  InMemoryAuthRepository,
+  PostgresAuthRepository,
+  createDefaultAuthRepository,
+} from './auth/authRepository';
+export { type AuthService, createAuthService } from './auth/authService';
 export { isNonEmptyString } from './socket/validate';
 export { registerRoomHandlers } from './socket/roomHandlers';
 export { attachSocketHandlers } from './socket/attach';

@@ -7,6 +7,15 @@ const INTERNAL_ERROR = { code: 'INTERNAL_ERROR', message: 'An unexpected error o
 /** A display label, not an identity — generous, but still bounded so one player can't wreck the seat-list UI for everyone else in the room. */
 const MAX_NAME_LENGTH = 40;
 
+/** Set by index.ts's socket.io auth middleware from the already-verified session — never trust a client-supplied value for identity, only this. */
+function accountEmailOf(socket: Socket): string | undefined {
+  return (socket.data as { email?: string }).email;
+}
+
+function accountDisplayNameOf(socket: Socket): string | undefined {
+  return (socket.data as { displayName?: string }).displayName;
+}
+
 /**
  * The four room-lifecycle events every game shares verbatim. Note "is this
  * seat valid for this room" is intentionally not checked here — only
@@ -63,7 +72,7 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
     const email = payload.email as string | undefined;
     const name = payload.name as string | undefined;
     store
-      .joinRoom(roomCode, role, socket.id, email, name)
+      .joinRoom(roomCode, role, socket.id, email, name, accountEmailOf(socket))
       .then(async (result) => {
         if (result.ok) {
           socket.join(roomCode);
@@ -100,7 +109,7 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       const role = payload.role as TSeat;
       const seatToken = payload.seatToken;
       store
-        .reconnectRoom(roomCode, role, seatToken, socket.id)
+        .reconnectRoom(roomCode, role, seatToken, socket.id, accountEmailOf(socket))
         .then(async (result) => {
           if (result.ok) {
             socket.join(roomCode);
@@ -116,6 +125,38 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
         });
     },
   );
+
+  socket.on('reconnect_by_account', (payload: { roomCode?: unknown }, cb: (res: unknown) => void) => {
+    if (!payload || !isNonEmptyString(payload.roomCode)) {
+      cb({ ok: false, error: INVALID_PAYLOAD });
+      return;
+    }
+    const accountEmail = accountEmailOf(socket);
+    if (!accountEmail) {
+      // Shouldn't normally happen — every connected socket passed the
+      // site-wide sign-in gate — but fail the same way "no owned seat"
+      // does rather than a hard error, since the client treats both
+      // identically (fall through to the normal picking-role lobby).
+      cb({ ok: false, error: { code: 'NO_OWNED_SEAT', message: 'Not signed in.' } });
+      return;
+    }
+    const roomCode = payload.roomCode;
+    store
+      .reconnectByAccount(roomCode, accountEmail, socket.id, accountDisplayNameOf(socket))
+      .then(async (result) => {
+        if (result.ok) {
+          socket.join(roomCode);
+          const info = await store.getRoomInfo(roomCode);
+          if (info) socket.emit('room_update', info);
+          await store.resyncAfterJoin(roomCode);
+        }
+        cb(result);
+      })
+      .catch((error) => {
+        console.error('[socket] reconnect_by_account failed:', error);
+        cb({ ok: false, error: INTERNAL_ERROR });
+      });
+  });
 
   socket.on('leave_seat', (payload: { roomCode?: unknown }, cb: (res: { ok: true }) => void) => {
     if (!payload || !isNonEmptyString(payload.roomCode)) {

@@ -14,8 +14,8 @@ export interface EmailSender {
 /** Used whenever RESEND_API_KEY isn't set (local dev, tests, CI) — logs instead of sending, so nothing crashes or silently no-ops without a trace. */
 export function createNoopEmailSender(): EmailSender {
   return {
-    async send(to, subject) {
-      console.log(`[email:noop] would send "${subject}" to ${to} (set RESEND_API_KEY to actually send)`);
+    async send(to, subject, text) {
+      console.log(`[email:noop] would send "${subject}" to ${to} (set RESEND_API_KEY to actually send):\n${text}`);
     },
   };
 }

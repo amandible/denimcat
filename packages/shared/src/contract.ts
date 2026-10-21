@@ -50,6 +50,17 @@ export interface RoomLifecycleClientToServerEvents<TSeat extends string, TConfig
     payload: { roomCode: string; role: TSeat; seatToken: string },
     cb: (res: JoinResult<TSeat, TView>) => void,
   ) => void;
+  /**
+   * Tried before falling back to peek_room/picking-role when this browser
+   * has no locally-stored seat token for the room: lets the server's
+   * record of which signed-in account last held each seat (independent of
+   * any particular browser's seat token, and outliving a lapsed reconnect
+   * grace) silently reconnect a returning player — a different device, or
+   * this same browser well after its stored token went stale. `{ok:false}`
+   * (no error worth surfacing) just means no seat here is tied to this
+   * account yet — the normal case for a brand-new player.
+   */
+  reconnect_by_account: (payload: { roomCode: string }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
   leave_seat: (payload: { roomCode: string }, cb: (res: { ok: true }) => void) => void;
 }
 

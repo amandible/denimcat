@@ -38,6 +38,16 @@ export interface PersistedRoom<TState, TSeat extends string> {
    * RoomStore.hydrateRoom backfills it from `seats[...].email` on read.
    */
   knownEmails?: Partial<Record<TSeat, string>>;
+  /**
+   * Every signed-in account's email that has EVER held a seat, keyed by
+   * seat — the server-verified counterpart to knownEmails (which is
+   * client-supplied and purely a notification preference). Never cleared,
+   * so it outlives a lapsed reconnect grace the same way knownEmails does;
+   * see RoomStore.reconnectByAccount, which is what actually reads this.
+   * Unlike knownEmails there's no legacy field to backfill from — this
+   * simply starts empty for any room persisted before accounts existed.
+   */
+  knownAccounts?: Partial<Record<TSeat, string>>;
   createdAt: number;
   lastActivityAt: number;
 }

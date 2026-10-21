@@ -36,6 +36,8 @@ interface LiveRoom<TState, TSeat extends string> {
   seats: Partial<Record<TSeat, LiveSeat>>;
   /** Every email any seat has EVER supplied — see PersistedRoom.knownEmails's doc comment for why this outlives `seats`. */
   knownEmails: Partial<Record<TSeat, string>>;
+  /** Every signed-in account that has EVER held a seat — see PersistedRoom.knownAccounts's doc comment. */
+  knownAccounts: Partial<Record<TSeat, string>>;
   spectatorSocketIds: Set<string>;
   createdAt: number;
   lastActivityAt: number;
@@ -133,6 +135,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seatOrder,
       seats: {},
       knownEmails: {},
+      knownAccounts: {},
       spectatorSocketIds: new Set(),
       createdAt: now,
       lastActivityAt: now,
@@ -165,6 +168,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     // persisted.knownEmails directly — a room saved before this field
     // existed still has its emails sitting on `seats[...].email`.
     const knownEmails: Partial<Record<TSeat, string>> = { ...persisted.knownEmails };
+    const knownAccounts: Partial<Record<TSeat, string>> = { ...persisted.knownAccounts };
     for (const seat of persisted.seatOrder) {
       const persistedSeat = persisted.seats[seat];
       if (!persistedSeat) continue;
@@ -178,6 +182,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seatOrder: persisted.seatOrder,
       seats,
       knownEmails,
+      knownAccounts,
       spectatorSocketIds: new Set(),
       createdAt: persisted.createdAt,
       lastActivityAt: persisted.lastActivityAt,
@@ -189,7 +194,14 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return hydrated;
   }
 
-  async joinRoom(code: string, role: Role<TSeat>, socketId: string, email?: string, name?: string): Promise<JoinResult<TSeat, unknown>> {
+  async joinRoom(
+    code: string,
+    role: Role<TSeat>,
+    socketId: string,
+    email?: string,
+    name?: string,
+    accountEmail?: string,
+  ): Promise<JoinResult<TSeat, unknown>> {
     const room = await this.getRoom(code);
     if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
 
@@ -221,6 +233,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     const seatToken = nanoid(21);
     room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name };
     if (email) room.knownEmails[role] = email;
+    if (accountEmail) room.knownAccounts[role] = accountEmail;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
@@ -228,7 +241,13 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return { ok: true, seatToken, gameState: this.viewFor(room, role), you: { role } };
   }
 
-  async reconnectRoom(code: string, role: TSeat, seatToken: string, socketId: string): Promise<JoinResult<TSeat, unknown>> {
+  async reconnectRoom(
+    code: string,
+    role: TSeat,
+    seatToken: string,
+    socketId: string,
+    accountEmail?: string,
+  ): Promise<JoinResult<TSeat, unknown>> {
     const room = await this.getRoom(code);
     if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
 
@@ -240,12 +259,68 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     this.clearGraceTimer(code, role);
     seat.socketId = socketId;
     seat.disconnectedAt = null;
+    // Backfills knownAccounts for a seat that predates this feature, or was
+    // last (re)joined before this browser's account was known — the very
+    // next account-based reconnect attempt (any device) then just works.
+    if (accountEmail) room.knownAccounts[role] = accountEmail;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
     this.nsp.to(code).emit('seat_taken_over', { role });
     this.broadcastRoomInfo(room);
     return { ok: true, gameState: this.viewFor(room, role), you: { role } };
+  }
+
+  /**
+   * Tried by a browser with no locally-stored seat token for this room
+   * (see roomHandlers.ts's reconnect_by_account): finds whichever seat
+   * `accountEmail` has ever held (knownAccounts, which — unlike the live
+   * `seats` map — survives a lapsed reconnect grace) and reclaims it,
+   * either by taking over a still-live seat (identical semantics to
+   * reconnectRoom's own unconditional takeover — same precedent, just
+   * reached via account identity instead of a possessed token) or, if the
+   * seat's live record already expired, rejoining fresh against the same
+   * underlying game state (seat state lives in `gameState`, keyed by seat
+   * id, untouched by a seat's own live-record expiry). `fallbackName` is
+   * only used in that second case, to avoid a seat silently going nameless
+   * once its original LiveSeat.name is gone (no lobby screen is shown to
+   * ask again — this whole path is silent-by-design).
+   */
+  async reconnectByAccount(
+    code: string,
+    accountEmail: string,
+    socketId: string,
+    fallbackName?: string,
+  ): Promise<JoinResult<TSeat, unknown>> {
+    const room = await this.getRoom(code);
+    if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
+
+    const role = room.seatOrder.find((seat) => room.knownAccounts[seat] === accountEmail);
+    if (!role) {
+      return { ok: false, error: { code: 'NO_OWNED_SEAT', message: 'No seat in this room is associated with your account.' } };
+    }
+
+    const existing = room.seats[role];
+    if (existing) {
+      this.clearGraceTimer(code, role);
+      existing.socketId = socketId;
+      existing.disconnectedAt = null;
+      this.socketBindings.set(socketId, { code, role });
+      room.lastActivityAt = Date.now();
+      await this.persist(room);
+      this.nsp.to(code).emit('seat_taken_over', { role });
+      this.broadcastRoomInfo(room);
+      return { ok: true, seatToken: existing.seatToken, gameState: this.viewFor(room, role), you: { role } };
+    }
+
+    const seatToken = nanoid(21);
+    const email = room.knownEmails[role]; // carry forward whatever notify preference this seat last had
+    room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name: fallbackName };
+    this.socketBindings.set(socketId, { code, role });
+    room.lastActivityAt = Date.now();
+    await this.persist(room);
+    this.broadcastRoomInfo(room);
+    return { ok: true, seatToken, gameState: this.viewFor(room, role), you: { role } };
   }
 
   async leaveSeat(code: string, socketId: string): Promise<void> {
@@ -464,6 +539,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seatOrder: [...room.seatOrder],
       seats,
       knownEmails: { ...room.knownEmails },
+      knownAccounts: { ...room.knownAccounts },
       createdAt: room.createdAt,
       lastActivityAt: room.lastActivityAt,
     };

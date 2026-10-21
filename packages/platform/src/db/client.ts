@@ -28,4 +28,38 @@ export async function ensureSchema(): Promise<void> {
       last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  // Magic-link sign-in (see auth/authRepository.ts). `accounts` is a ledger
+  // (written the first time an email is ever seen — not a pre-approval
+  // gate, since signup is open) rather than something to collapse into
+  // `magic_links`/`sessions`: those two have incompatible lifetimes
+  // (single-use ~20min vs. reusable ~30 days), so keeping all three
+  // separate avoids an awkward polymorphic `kind` column.
+  await db`
+    CREATE TABLE IF NOT EXISTS accounts (
+      email TEXT PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  // Idempotent and additive like the CREATE TABLEs above, just via ALTER
+  // instead — `ADD COLUMN IF NOT EXISTS` is safe to run against a table
+  // that was already created before this column existed, unlike the
+  // no-op-against-an-existing-table CREATE TABLE IF NOT EXISTS pattern.
+  await db`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name TEXT`;
+  await db`
+    CREATE TABLE IF NOT EXISTS magic_links (
+      token TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ
+    )
+  `;
+  await db`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
 }

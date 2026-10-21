@@ -117,6 +117,88 @@ describe('RoomStore — optional display name at join time', () => {
   });
 });
 
+describe('RoomStore — reconnecting by account identity', () => {
+  it('reconnect_by_account finds nothing for an account that has never held a seat here', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await store.reconnectByAccount(created.roomCode, 'nobody@example.com', 'socket-1');
+    expect(result).toEqual({ ok: false, error: { code: 'NO_OWNED_SEAT', message: expect.any(String) } });
+    store.stop();
+  });
+
+  it('joinRoom records the account on the seat, and reconnect_by_account finds it from a different socket with no seat token', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    // A second device/tab, same account, no local seat token for this room at all.
+    const result = await store.reconnectByAccount(created.roomCode, 'alice@example.com', 'socket-2');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.you).toEqual({ role: 'p1' });
+    expect(typeof result.seatToken).toBe('string');
+
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.seats.p1?.socketId).toBe('socket-2'); // took over from socket-1
+    store.stop();
+  });
+
+  it('still finds the seat after its live record has fully expired (past the reconnect grace), reusing the same game state', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace(), { graceMs: 1 });
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    const room1 = await store.getRoom(created.roomCode);
+    room1!.gameState.value = 7; // stands in for real per-seat game progress — mutating the live cached object directly is enough, same instance getRoom returns below
+
+    await store.handleDisconnect('socket-1');
+    await new Promise((resolve) => setTimeout(resolve, 20)); // let the 1ms grace timer fire and free the seat
+
+    const room2 = await store.getRoom(created.roomCode);
+    expect(room2?.seats.p1).toBeUndefined(); // the live seat record is really gone
+
+    const result = await store.reconnectByAccount(created.roomCode, 'alice@example.com', 'socket-2');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.you).toEqual({ role: 'p1' });
+    expect((result.gameState as TestState).value).toBe(7); // same underlying game state, not reset
+    store.stop();
+  });
+
+  it('reconnectRoom backfills the account association for a seat that predates it', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    await repo.save({
+      code: 'OLDR',
+      gameId: 'test-game',
+      gameState: { value: 0 },
+      seatOrder: ['p1', 'p2'],
+      seats: { p1: { seatToken: 'tok-1' }, p2: { seatToken: 'tok-2' } }, // no accountEmail on either — "pre-accounts" room
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+    });
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+
+    // Not yet associated — reconnect_by_account can't find it before the owner's first real reconnect.
+    expect((await store.reconnectByAccount('OLDR', 'alice@example.com', 'socket-x')).ok).toBe(false);
+
+    await store.reconnectRoom('OLDR', 'p1', 'tok-1', 'socket-1', 'alice@example.com');
+    // Now it works, from a different socket with no token at all.
+    const result = await store.reconnectByAccount('OLDR', 'alice@example.com', 'socket-2');
+    expect(result.ok).toBe(true);
+    store.stop();
+  });
+});
+
 type TurnSeat = 'p1' | 'p2';
 type TurnState = { turn: TurnSeat | null };
 
