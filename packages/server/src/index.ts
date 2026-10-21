@@ -14,7 +14,16 @@ import type {
 } from '@denimcat/engine-love-triangles';
 import type { Color as TashKalarSeatId, GameState as TashKalarState, TashKalarConfig } from '@denimcat/engine-tashkalar';
 import type { Color as KingsGateSeatId, GameState as KingsGateState, KingsGateConfig } from '@denimcat/engine-kingsgate';
-import { RoomStore, attachSocketHandlers, createDefaultEmailSender, createDefaultRoomRepository, ensureSchema, type RoomStoreOptions } from '@denimcat/platform';
+import {
+  RoomStore,
+  attachSocketHandlers,
+  createAuthService,
+  createDefaultAuthRepository,
+  createDefaultEmailSender,
+  createDefaultRoomRepository,
+  ensureSchema,
+  type RoomStoreOptions,
+} from '@denimcat/platform';
 import { createApp } from './app';
 import { hyperBloomModule } from '../../../private-games/other-games/server-hyperbloom/module';
 import { mintConditionModule } from './games/mint-condition/module';
@@ -25,27 +34,70 @@ import { kingsGateModule } from '../../../private-games/other-games/server-kings
 async function main() {
   await ensureSchema();
 
-  const app = createApp();
+  // CLIENT_ORIGIN may be a single origin or a comma-separated list (e.g. a
+  // vercel.app URL alongside a custom domain aliased to the same
+  // deployment) — computed once and shared by Socket.io's CORS config and
+  // the /auth HTTP routes' CORS config below, rather than deriving it twice.
+  const clientOrigins =
+    process.env.CLIENT_ORIGIN?.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? [];
+
+  // One shared EmailSender for both async-play turn notifications and
+  // magic-link sign-in. Resend when RESEND_API_KEY/RESEND_FROM are set,
+  // else a noop sender that just logs.
+  const emailSender = createDefaultEmailSender();
+  const appBaseUrl = process.env.APP_BASE_URL;
+
+  const authRepository = createDefaultAuthRepository();
+  const authService = createAuthService(authRepository, emailSender, appBaseUrl, process.env.OWNER_EMAIL);
+
+  const app = createApp({ authService, clientOrigins });
   const httpServer = createServer(app);
   // Untyped at the top level deliberately: this one Server hosts multiple
   // games, each with its own event contract on its own namespace (typed
   // strictly on the client side and within each game's own handler files).
-  // CLIENT_ORIGIN may be a single origin or a comma-separated list (e.g. a
-  // vercel.app URL alongside a custom domain aliased to the same
-  // deployment) — Socket.io accepts an array of exact-match origins here.
-  const clientOrigins = process.env.CLIENT_ORIGIN?.split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
   const io = new Server(httpServer, {
-    cors: { origin: clientOrigins && clientOrigins.length > 0 ? clientOrigins : '*' },
+    cors: { origin: clientOrigins.length > 0 ? clientOrigins : '*' },
   });
 
-  // Async play: one shared EmailSender + base URL for every game's turn
-  // notifications (see RoomStore.notifyTurnIfOffline). Resend when
-  // RESEND_API_KEY/RESEND_FROM are set, else a noop sender that just logs.
+  // Magic-link sign-in gate for every game namespace, registered via
+  // Socket.io's "parent namespace" feature (io.of(regex)) rather than plain
+  // io.use() — the latter is shorthand for io.of("/").use(...) and only
+  // ever applies to the default namespace, which this server never uses
+  // (every game connects via io.of('/hyperbloom') etc.), so it would
+  // silently protect nothing. A regex parent namespace's middleware IS
+  // inherited by every later plain-string namespace matching it
+  // (ParentNamespace.createChild copies each registered fn onto the
+  // child as it's created) — which is also why this must run BEFORE the
+  // per-game io.of(...) calls below: inheritance only happens at the
+  // moment a namespace is first created.
+  io.of(/^\/.+$/).use(async (socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (typeof token !== 'string' || !token) {
+      next(new Error('unauthorized'));
+      return;
+    }
+    const session = await authService.checkSession(token);
+    if (!session) {
+      next(new Error('unauthorized'));
+      return;
+    }
+    // Available to every game's socket handlers as the server-verified
+    // identity (see roomHandlers.ts's accountEmailOf/accountDisplayNameOf)
+    // — never trust a client-supplied email/name for this purpose, only
+    // this, since it's what lets reconnect_by_account recognize a seat as
+    // belonging to this account.
+    socket.data.email = session.email;
+    socket.data.displayName = session.displayName ?? undefined;
+    next();
+  });
+
+  // Async play: shared base URL for every game's turn notifications (see
+  // RoomStore.notifyTurnIfOffline).
   const roomStoreOptions: RoomStoreOptions = {
-    emailSender: createDefaultEmailSender(),
-    appBaseUrl: process.env.APP_BASE_URL,
+    emailSender,
+    appBaseUrl,
   };
 
   const hyperBloomRepository = createDefaultRoomRepository<HyperBloomState, Color>();

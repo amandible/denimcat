@@ -16,12 +16,14 @@
     "@denimcat/engine-mint-condition": "*",
     "@denimcat/engine-love-triangles": "*",
     "@denimcat/platform": "*",
+    "cors": "^2.8.5",
     "express": "^4.21.2",
     "socket.io": "^4.8.1",
     "dotenv": "^16.4.7",
     "tsx": "^4.19.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.13.1",
     "socket.io-client": "^4.8.1",
