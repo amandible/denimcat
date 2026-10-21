@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { PlayerCount } from '@denimcat/engine-mint-condition';
 import { createSocket } from '../../socket';
+import { loadSessionToken } from '../../state/authToken';
 import '../../styles/mint-condition.css';
 
 function goToRoom(code: string, hotseat?: boolean, playerCount?: PlayerCount) {
@@ -20,7 +21,7 @@ export function MintConditionHomeView() {
 
   function handleCreate(hotseat?: boolean) {
     setBusy(true);
-    const socket = createSocket('/mint-condition');
+    const socket = createSocket('/mint-condition', loadSessionToken() ?? '');
     socket.on('connect', () => {
       socket.emit(
         'create_room',

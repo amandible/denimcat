@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { clearSeat, clearSeatForRole, loadSeat, loadSeatForRole, saveSeat, saveSeatForRole } from './seatToken';
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:4000';
+import { invalidateSession, loadSessionToken } from './authToken';
+import { SERVER_URL } from '../socket';
 
 /**
  * Reads `?seat=&token=` (a turn-notification email's reconnect link — see
@@ -91,8 +91,17 @@ export function useRoomConnection<TView>(
   const fixedRole = options.role;
 
   useEffect(() => {
-    const socket = io(`${SERVER_URL}${namespace}`, { transports: ['websocket'] });
+    const socket = io(`${SERVER_URL}${namespace}`, { transports: ['websocket'], auth: { token: loadSessionToken() ?? '' } });
     socketRef.current = socket;
+
+    // The server's auth middleware rejects a missing/expired/invalid
+    // session token before the connection ever reaches 'connect' — treat
+    // that the same as a session that just expired: clear it and let App's
+    // sign-in gate take over, rather than Socket.io's default reconnection
+    // logic retrying forever against a dead token.
+    socket.on('connect_error', (error) => {
+      if (error.message === 'unauthorized') invalidateSession();
+    });
 
     socket.on('connect', () => {
       if (fixedRole !== undefined) {
@@ -119,7 +128,21 @@ export function useRoomConnection<TView>(
       // a different device/browser than the one that originally joined.
       const linked = consumeReconnectLinkParams();
       const stored = linked ?? loadSeat(gameSlug, roomCode);
-      if (!stored) {
+
+      function handleAccountReconnectSuccess(res: any) {
+        setGameState(res.gameState);
+        setYou(res.you);
+        setStatus('in-room');
+        setLastError(null);
+        // So this device also gets the fast local-token path on its next visit.
+        if (res.seatToken) saveSeat(gameSlug, roomCode, { role: res.you.role, seatToken: res.seatToken });
+      }
+
+      function showPickingRole(previousRole: string | null, previousName: string | null, error: string | null) {
+        if (previousRole !== null) {
+          setPreviousRole(previousRole);
+          setPreviousName(previousName);
+        }
         // Learn the room's actual seat list before showing role-pick
         // buttons — a static per-game list would offer seats a specific
         // room (e.g. one created for fewer players) doesn't actually have.
@@ -127,7 +150,19 @@ export function useRoomConnection<TView>(
           if (res.ok) setRoomInfo(res.roomInfo);
           else setLastError(res.error.message);
         });
+        if (error !== null) setLastError(error);
         setStatus('picking-role');
+      }
+
+      if (!stored) {
+        // No locally-stored seat token for this room — but this signed-in
+        // account may already own a seat here (a different device, or this
+        // same browser returning well after its own token went stale and
+        // got cleared) — try that before ever showing the seat-picker.
+        socket.emit('reconnect_by_account', { roomCode }, (res: any) => {
+          if (res.ok) handleAccountReconnectSuccess(res);
+          else showPickingRole(null, null, null);
+        });
         return;
       }
       socket.emit('reconnect_room', { roomCode, role: stored.role, seatToken: stored.seatToken }, (res: any) => {
@@ -142,24 +177,26 @@ export function useRoomConnection<TView>(
           // it's still there for a *later* welcome-back prompt rather than
           // getting silently dropped on every successful reconnect.
           saveSeat(gameSlug, roomCode, { role: stored.role, seatToken: stored.seatToken, name: stored.name });
-        } else {
-          // The stored token no longer works — almost always because this
-          // seat's reconnect grace already lapsed (see RoomStore.expireSeat)
-          // before this later visit, the normal case after any real gap in
-          // async play, not a sign anything went wrong. The role (and name,
-          // if this browser ever gave one) is still worth remembering for
-          // the picking-role screen about to show: this player isn't a
-          // stranger to that seat.
-          setPreviousRole(stored.role);
-          setPreviousName(stored.name ?? null);
-          clearSeat(gameSlug, roomCode);
+          return;
+        }
+        // The stored token no longer works — almost always because this
+        // seat's reconnect grace already lapsed (see RoomStore.expireSeat)
+        // before this later visit, the normal case after any real gap in
+        // async play. Try reclaiming the seat by account identity (which,
+        // unlike the token, survives exactly this) before falling back to
+        // the picker.
+        clearSeat(gameSlug, roomCode);
+        socket.emit('reconnect_by_account', { roomCode }, (res2: any) => {
+          if (res2.ok) {
+            handleAccountReconnectSuccess(res2);
+            return;
+          }
           // Suppress the raw "seat token does not match" wording for the
           // expected case (lapsed grace) — the picking-role screen already
           // explains it via previousRole. A genuinely missing room is still
           // worth surfacing as an actual error.
-          setLastError(res.error.code === 'ROOM_NOT_FOUND' ? res.error.message : null);
-          setStatus('picking-role');
-        }
+          showPickingRole(stored.role, stored.name ?? null, res.error.code === 'ROOM_NOT_FOUND' ? res.error.message : null);
+        });
       });
     });
 

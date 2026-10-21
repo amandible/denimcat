@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { RoomConnection } from '../state/useRoomConnection';
+import { loadAuthEmail, loadDisplayName } from '../state/authToken';
 
 export function LobbyView({
   roomCode,
@@ -14,8 +15,13 @@ export function LobbyView({
   seatLabel: (seat: string) => string;
 }) {
   const seats = connection.roomInfo?.seatOrder ?? candidateSeats;
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
+  // Every visitor is signed in with an email by now (the site-wide magic-link
+  // gate), so there's nothing left to type here — just whether they want
+  // notifications, not which address to send them to. See Settings for
+  // changing the display name this pre-fills from.
+  const authEmail = loadAuthEmail();
+  const [notifyByEmail, setNotifyByEmail] = useState(false);
+  const [name, setName] = useState(loadDisplayName() ?? '');
   // A stored seat token for this room went stale (its reconnect grace
   // lapsed since this browser was last here) — unless someone else has
   // since taken that seat, this player isn't picking a fresh one, they're
@@ -52,17 +58,9 @@ export function LobbyView({
             style={{ width: '100%', padding: 10, fontSize: 14, border: '1px solid var(--border)', borderRadius: 8 }}
           />
         </label>
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>
-            Email (optional) — get notified when it's your turn
-          </span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            style={{ width: '100%', padding: 10, fontSize: 14, border: '1px solid var(--border)', borderRadius: 8 }}
-          />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 16 }}>
+          <input type="checkbox" checked={notifyByEmail} onChange={(e) => setNotifyByEmail(e.target.checked)} />
+          {authEmail ? `Email me at ${authEmail} when it's my turn` : "Email me when it's my turn"}
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
           {seats.map((seat) => {
@@ -73,7 +71,9 @@ export function LobbyView({
                 key={seat}
                 className={isReturning ? 'btn btn-primary' : 'btn'}
                 disabled={!!occupant}
-                onClick={() => connection.joinAs(seat, email.trim() || undefined, name.trim() || undefined)}
+                onClick={() =>
+                  connection.joinAs(seat, notifyByEmail ? (authEmail ?? undefined) : undefined, name.trim() || undefined)
+                }
                 style={{ padding: 12, fontSize: 16 }}
               >
                 {occupant

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { PlayerCount } from '@denimcat/engine-love-triangles';
 import { createSocket } from '../../socket';
+import { loadSessionToken } from '../../state/authToken';
 import '../../styles/love-triangles.css';
 
 function goToRoom(code: string, hotseat?: boolean, playerCount?: PlayerCount) {
@@ -20,7 +21,7 @@ export function LoveTrianglesHomeView() {
 
   function handleCreate(hotseat?: boolean) {
     setBusy(true);
-    const socket = createSocket('/love-triangles');
+    const socket = createSocket('/love-triangles', loadSessionToken() ?? '');
     socket.on('connect', () => {
       socket.emit(
         'create_room',

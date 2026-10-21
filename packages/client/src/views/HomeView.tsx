@@ -1,9 +1,27 @@
 import { GAMES } from '../games/registry';
+import { invalidateSession, loadSessionToken } from '../state/authToken';
+import { SERVER_URL } from '../socket';
+
+async function handleSignOut() {
+  const token = loadSessionToken();
+  if (token) {
+    await fetch(`${SERVER_URL}/auth/sign-out`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  }
+  invalidateSession();
+}
 
 export function HomeView() {
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
       <div style={{ width: '100%' }}>
+        <div style={{ textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+          <a href="/settings" style={{ fontSize: 13, color: 'var(--muted)' }}>
+            Settings
+          </a>
+          <a href="#" onClick={(e) => { e.preventDefault(); handleSignOut(); }} style={{ fontSize: 13, color: 'var(--muted)' }}>
+            Sign out
+          </a>
+        </div>
         <h1 style={{ fontSize: 36, textAlign: 'center' }}>denimcat</h1>
         <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 0 }}>Pick a game to play.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
