@@ -15,22 +15,22 @@ export function NewPrizeSlotPicker({
 }) {
   const lastIndex = priceSlots.length - 1;
   const upperIndices = new Set([lastIndex - 1, lastIndex]);
-  const placeableEmptySlots = new Set(
-    priceSlots
-      .map((slot, i) => i)
-      .filter((i) => priceSlots[i].prizes.length === 0 && (!upperIndices.has(i) || unlockedUpperSlots.includes(i))),
+  // Any unlocked slot is a legal target, occupied or not — placing can
+  // stack the new prize alongside whatever's already there.
+  const placeableSlots = new Set(
+    priceSlots.map((_, i) => i).filter((i) => !upperIndices.has(i) || unlockedUpperSlots.includes(i)),
   );
 
   return (
     <div className="panel">
-      <h3>You revealed a new prize — click an empty slot to place it</h3>
+      <h3>You revealed a new prize — click a slot to place it (an occupied one stacks it there)</h3>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <PrizeChip prize={revealedPrize} />
         <span style={{ color: 'var(--muted)', fontSize: 13 }}>
           {revealedPrize.color} · {revealedPrize.points} VP
         </span>
       </div>
-      <PriceSlotTrack slots={priceSlots} placeableEmptySlots={placeableEmptySlots} onPlaceInSlot={onPlace} />
+      <PriceSlotTrack slots={priceSlots} placeableSlots={placeableSlots} onPlaceInSlot={onPlace} />
     </div>
   );
 }

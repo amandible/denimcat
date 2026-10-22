@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeNewPrize, shiftDisplay, skipPrizeChoice, takePrize } from '../src/prizes';
+import { eligibleTakeSlotIndex, placeNewPrize, shiftDisplay, skipPrizeChoice, takePrize } from '../src/prizes';
 import { resolveAuctionWin } from '../src/bidding';
 import { makeState, prize } from './helpers';
 
@@ -87,6 +87,29 @@ describe('shiftDisplay', () => {
   });
 });
 
+describe('eligibleTakeSlotIndex', () => {
+  const slots = [
+    { price: 1, prizes: [] },
+    { price: 2, prizes: [prize('cheap', 'red', 1)] },
+    { price: 3, prizes: [] },
+    { price: 4, prizes: [prize('mid', 'green', 2)] },
+    { price: 5, prizes: [prize('pricey', 'blue', 4)] },
+    { price: 6, prizes: [] },
+  ];
+
+  it('picks the priciest occupied slot within the bid, not just any affordable occupied slot', () => {
+    expect(eligibleTakeSlotIndex(slots, 4)).toBe(3); // the price-4 slot, not the cheaper price-2 one
+  });
+
+  it('skips past an affordable but empty slot to a cheaper occupied one', () => {
+    expect(eligibleTakeSlotIndex(slots, 3)).toBe(1); // price-3 slot is empty; falls back to price-2
+  });
+
+  it('returns null when nothing affordable is occupied', () => {
+    expect(eligibleTakeSlotIndex(slots, 1)).toBeNull(); // only the empty price-1 slot is <= bid
+  });
+});
+
 describe('takePrize', () => {
   function winningState() {
     return makeState({
@@ -117,6 +140,51 @@ describe('takePrize', () => {
   it('rejects a seat other than the winner', () => {
     const result = takePrize(winningState(), 'p2', 'cheap');
     expect(result.ok).toBe(false);
+  });
+
+  it(
+    'no choice of slot: rejects a prize sitting in an affordable-but-not-eligible slot, even though its ' +
+      "own price is within the bid — only the priciest occupied slot within the bid may be taken from",
+    () => {
+      const state = makeState({
+        phase: 'awaiting-prize-choice',
+        priceSlots: [
+          { price: 1, prizes: [] },
+          { price: 2, prizes: [prize('cheap', 'red', 1)] },
+          { price: 3, prizes: [prize('mid', 'green', 2)] }, // the actually-eligible slot (priciest <= bid)
+          { price: 4, prizes: [] },
+          { price: 5, prizes: [] },
+          { price: 6, prizes: [] },
+        ],
+        auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [3], amount: 3 } },
+      });
+      const result = takePrize(state, 'p1', 'cheap'); // affordable, but not the eligible slot
+      expect(result.ok).toBe(false);
+    },
+  );
+
+  it("choice of prize: when the eligible slot holds more than one prize, either may be chosen", () => {
+    const state = makeState({
+      phase: 'awaiting-prize-choice',
+      priceSlots: [
+        { price: 1, prizes: [] },
+        { price: 2, prizes: [prize('first', 'red', 1), prize('second', 'blue', 2)] },
+        { price: 3, prizes: [] },
+        { price: 4, prizes: [] },
+        { price: 5, prizes: [] },
+        { price: 6, prizes: [] },
+      ],
+      prizeDeck: [],
+      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+    });
+    const result = takePrize(state, 'p1', 'second');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.players.p1.wonPrizes).toEqual([prize('second', 'blue', 2)]);
+    // The other prize stays in the display — shifted up one slot (2 -> ...)
+    // like everything else that went unbought this round, same as the
+    // regular shiftDisplay behavior exercised elsewhere in this file.
+    expect(result.state.priceSlots[2].prizes).toEqual([prize('first', 'red', 1)]);
   });
 
   it('awards the prize, shifts the display, and moves to placing the new reveal', () => {
@@ -218,11 +286,13 @@ describe('placeNewPrize', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('rejects placing into an occupied slot', () => {
+  it('allows placing into an already-occupied slot, stacking the new prize alongside the existing one', () => {
     const state = placingState();
     state.priceSlots[2].prizes = [prize('existing', 'red', 1)];
     const result = placeNewPrize(state, 'p1', 2);
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.priceSlots[2].prizes).toEqual([prize('existing', 'red', 1), prize('revealed', 'purple', 4)]);
   });
 
   it('rejects a seat other than the winner', () => {
@@ -250,6 +320,15 @@ describe('placeNewPrize', () => {
     const state = { ...placingState(), unlockedUpperSlots: [4] };
     expect(placeNewPrize(state, 'p1', 4).ok).toBe(true);
     expect(placeNewPrize(state, 'p1', 5).ok).toBe(false);
+  });
+
+  it('an unlocked upper slot that already holds a prize still accepts a stacked placement', () => {
+    const state = { ...placingState(), unlockedUpperSlots: [4] };
+    state.priceSlots[4].prizes = [prize('existing', 'green', 2)];
+    const result = placeNewPrize(state, 'p1', 4);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.priceSlots[4].prizes).toEqual([prize('existing', 'green', 2), prize('revealed', 'purple', 4)]);
   });
 
   it('does not restrict placement into any of the bottom four slots', () => {

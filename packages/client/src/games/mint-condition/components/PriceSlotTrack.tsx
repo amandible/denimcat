@@ -4,20 +4,21 @@ import { PrizeChip } from './PrizeChip';
 export function PriceSlotTrack({
   slots,
   onPrizeClick,
-  highlightAffordableUpTo,
-  placeableEmptySlots,
+  eligibleSlotIndex,
+  placeableSlots,
   onPlaceInSlot,
 }: {
   slots: PriceSlot[];
   onPrizeClick?: (prizeId: string) => void;
-  /** When set (e.g. the winning bid amount), slots at or below this price are visually called out as affordable. */
-  highlightAffordableUpTo?: number;
+  /** When set (take-prize mode), this is the one slot the winner must take from this round — see eligibleTakeSlotIndex. Only its prizes are clickable, and it's the only slot highlighted. */
+  eligibleSlotIndex?: number;
   /**
-   * When set, the track enters "placing a new prize" mode: empty slots at
-   * these indices become clickable (via onPlaceInSlot); any other empty
-   * slot is shown as locked rather than clickable.
+   * When set, the track enters "placing a new prize" mode: slots at these
+   * indices become clickable (via onPlaceInSlot) regardless of whether they
+   * already hold a prize — placing can stack onto an occupied slot. Any
+   * other slot is shown as locked rather than clickable.
    */
-  placeableEmptySlots?: ReadonlySet<number>;
+  placeableSlots?: ReadonlySet<number>;
   onPlaceInSlot?: (slotIndex: number) => void;
 }) {
   // Vertical, cheapest at the bottom, priciest at the top — matches how
@@ -28,10 +29,9 @@ export function PriceSlotTrack({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'fit-content' }}>
       {bySlotIndexDescending.map(({ slot, i }) => {
-        const affordable = highlightAffordableUpTo !== undefined && slot.price <= highlightAffordableUpTo;
-        const isEmpty = slot.prizes.length === 0;
-        const isPlaceable = isEmpty && !!placeableEmptySlots?.has(i);
-        const isLockedForPlacement = isEmpty && !!placeableEmptySlots && !placeableEmptySlots.has(i);
+        const isEligible = eligibleSlotIndex === i;
+        const isPlaceable = !!placeableSlots?.has(i);
+        const isLockedForPlacement = !!placeableSlots && !isPlaceable;
         return (
           <div
             key={i}
@@ -42,7 +42,7 @@ export function PriceSlotTrack({
               display: 'flex',
               alignItems: 'center',
               gap: 12,
-              border: affordable || isPlaceable ? '2px solid var(--accent)' : undefined,
+              border: isEligible || isPlaceable ? '2px solid var(--accent)' : undefined,
               cursor: isPlaceable ? 'pointer' : undefined,
               opacity: isLockedForPlacement ? 0.5 : 1,
             }}
@@ -50,7 +50,7 @@ export function PriceSlotTrack({
             <div style={{ fontSize: 14, color: 'var(--muted)', minWidth: 24, textAlign: 'right' }}>{slot.price}</div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', minHeight: 66, minWidth: 200 }}>
               {slot.prizes.map((prize) => (
-                <PrizeChip key={prize.id} prize={prize} onClick={onPrizeClick && affordable ? () => onPrizeClick(prize.id) : undefined} />
+                <PrizeChip key={prize.id} prize={prize} onClick={onPrizeClick && isEligible ? () => onPrizeClick(prize.id) : undefined} />
               ))}
               {isPlaceable && <span style={{ color: 'var(--accent)', fontSize: 13 }}>Place here</span>}
               {isLockedForPlacement && <span style={{ color: 'var(--muted)', fontSize: 13 }}>🔒 locked</span>}

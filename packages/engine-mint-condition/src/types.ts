@@ -55,8 +55,8 @@ export interface GameState {
    * Set the moment a prize is revealed (i.e. as soon as phase becomes
    * 'awaiting-new-prize-placement'), before a slot is chosen for it — the
    * rules say the winner "gets to see the next prize and decide which
-   * empty slot to place it in," so it must be visible before that choice,
-   * not popped-and-placed as one atomic step. Public once revealed.
+   * slot to place it in," so it must be visible before that choice, not
+   * popped-and-placed as one atomic step. Public once revealed.
    */
   revealedPrize: PrizeCard | null;
   phase: Phase;

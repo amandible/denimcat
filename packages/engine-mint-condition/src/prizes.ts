@@ -65,12 +65,29 @@ function afterPrizeChoice(state: GameState): GameState {
     next = cloneState(next);
     // Reveal now (visible to everyone), before the winner has chosen a slot
     // for it — matches "the winner gets to see the next prize and decide
-    // which empty slot to place it in."
+    // which slot to place it in."
     next.revealedPrize = next.prizeDeck.pop()!;
     next.phase = 'awaiting-new-prize-placement';
     return next;
   }
   return concludeAuction(next);
+}
+
+/**
+ * The one slot a prize must be taken from under the given bid: the
+ * priciest occupied slot priced at or below `bidAmount` (rules.md: "takes
+ * their choice of prizes from the highest slot whose price is less than or
+ * equal to their bid"). There's no choice of SLOT — only, if that slot
+ * holds more than one prize, a choice of which one. Null means nothing
+ * displayed is affordable (skipPrizeChoice territory). Exported so the
+ * client can highlight the same slot and gate which prizes are clickable,
+ * without duplicating this scan.
+ */
+export function eligibleTakeSlotIndex(priceSlots: GameState['priceSlots'], bidAmount: number): number | null {
+  for (let i = priceSlots.length - 1; i >= 0; i--) {
+    if (priceSlots[i].price <= bidAmount && priceSlots[i].prizes.length > 0) return i;
+  }
+  return null;
 }
 
 export function takePrize(state: GameState, seat: SeatId, prizeId: string): EngineResult {
@@ -82,16 +99,15 @@ export function takePrize(state: GameState, seat: SeatId, prizeId: string): Engi
   }
 
   const bidAmount = (state.auction.highestBid as NonNullable<GameState['auction']['highestBid']>).amount;
-  let slotIndex = -1;
-  for (let i = 0; i < state.priceSlots.length; i++) {
-    if (state.priceSlots[i].prizes.some((p) => p.id === prizeId)) {
-      slotIndex = i;
-      break;
-    }
+  const slotIndex = eligibleTakeSlotIndex(state.priceSlots, bidAmount);
+  if (slotIndex === null) {
+    return err('NO_AFFORDABLE_PRIZE', 'Nothing displayed is affordable — skip instead.');
   }
-  if (slotIndex === -1) return err('PRIZE_NOT_FOUND', 'That prize is not currently in the display.');
-  if (state.priceSlots[slotIndex].price > bidAmount) {
-    return err('PRIZE_TOO_EXPENSIVE', "That prize's price exceeds the winning bid.");
+  if (!state.priceSlots[slotIndex].prizes.some((p) => p.id === prizeId)) {
+    return err(
+      'WRONG_SLOT',
+      "That prize isn't in the slot you must take from this round — the priciest slot within your bid that still holds a prize.",
+    );
   }
 
   const next = cloneState(state);
@@ -121,8 +137,7 @@ export function skipPrizeChoice(state: GameState, seat: SeatId): EngineResult {
   }
 
   const bidAmount = (state.auction.highestBid as NonNullable<GameState['auction']['highestBid']>).amount;
-  const anyAffordable = state.priceSlots.some((slot) => slot.price <= bidAmount && slot.prizes.length > 0);
-  if (anyAffordable) {
+  if (eligibleTakeSlotIndex(state.priceSlots, bidAmount) !== null) {
     return err('AFFORDABLE_PRIZE_AVAILABLE', 'At least one displayed prize is affordable and must be taken instead.');
   }
 
@@ -131,6 +146,14 @@ export function skipPrizeChoice(state: GameState, seat: SeatId): EngineResult {
   return ok(afterPrizeChoice(next));
 }
 
+/**
+ * The winner may place the newly-revealed prize into any unlocked slot,
+ * including one that already holds a prize — stacking it there (confirmed
+ * with the designer: this is deliberate, not an oversight, and is exactly
+ * what lets a slot end up with more than one prize for takePrize's
+ * choice-within-a-slot to matter). Only the upper-slot natural-unlock gate
+ * still restricts which slots are legal targets.
+ */
 export function placeNewPrize(state: GameState, seat: SeatId, slotIndex: number): EngineResult {
   if (state.phase !== 'awaiting-new-prize-placement') {
     return err('NOT_AWAITING_PLACEMENT', 'No newly revealed prize is waiting to be placed.');
@@ -140,9 +163,6 @@ export function placeNewPrize(state: GameState, seat: SeatId, slotIndex: number)
   }
   if (slotIndex < 0 || slotIndex >= state.priceSlots.length) {
     return err('OUT_OF_BOUNDS', 'No such price slot.');
-  }
-  if (state.priceSlots[slotIndex].prizes.length > 0) {
-    return err('SLOT_OCCUPIED', 'That slot is not empty.');
   }
   const lastIndex = state.priceSlots.length - 1;
   const isUpperSlot = slotIndex === lastIndex || slotIndex === lastIndex - 1;

@@ -180,10 +180,15 @@ describe('Mint Condition room + game flow over real sockets', () => {
     expect(peek.gameState.phase).toBe('awaiting-prize-choice');
     expect(peek.gameState.auction.winnerSeat).toBe(activeSeat);
 
-    const affordable = peek.gameState.priceSlots.flatMap((slot: any) => (slot.price <= card ? slot.prizes : []));
+    // No choice of slot: must take from the priciest occupied slot within
+    // the bid — scan from the priciest end down, same as the engine's
+    // eligibleTakeSlotIndex.
+    const eligibleSlot = [...peek.gameState.priceSlots]
+      .reverse()
+      .find((slot: any) => slot.price <= card && slot.prizes.length > 0);
     let after: any;
-    if (affordable.length > 0) {
-      after = await emitAck<any>(sockets[activeSeat], 'take_prize', { roomCode, prizeId: affordable[0].id });
+    if (eligibleSlot) {
+      after = await emitAck<any>(sockets[activeSeat], 'take_prize', { roomCode, prizeId: eligibleSlot.prizes[0].id });
     } else {
       after = await emitAck<any>(sockets[activeSeat], 'skip_prize_choice', { roomCode });
     }

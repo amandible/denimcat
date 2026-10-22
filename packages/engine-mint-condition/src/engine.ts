@@ -8,7 +8,7 @@ export {
   resolveAuctionNoWinner,
   type BidOption,
 } from './bidding';
-export { takePrize, skipPrizeChoice, placeNewPrize, shiftDisplay } from './prizes';
+export { takePrize, skipPrizeChoice, placeNewPrize, shiftDisplay, eligibleTakeSlotIndex } from './prizes';
 export { drawCardForSeat, drawPostAuctionCards } from './decks';
 export {
   scoreForPrizes,

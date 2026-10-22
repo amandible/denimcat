@@ -26,16 +26,19 @@ export function RulesContent() {
         more cards from their hand; they may also pass, in which case they may not bid again in this auction.
         Following players in turn may raise the bid (saying a higher number, that they could also pay
         exactly) or pass. When all but one player have passed, the winning player pays their bid (discarding
-        the cards) and takes their choice of prizes from the display, but they may only take a prize whose
-        price is less than or equal to their bid. No change is given! If you bid 20 and take a prize whose
-        price is 8, you still pay 20.
+        the cards) and takes their choice of prizes from the highest slot whose price is less than or equal
+        to their bid. In other words, if the two lowest occupied slots cost 3 and 8, a bid between 3 and 7
+        (inclusive) gets you a prize from the lower one — there's no choosing a cheaper slot instead, only
+        (if that slot holds more than one prize) which of its prizes to take. No change is given! If you bid
+        20 and take a prize whose price is 8, you still pay 20.
       </p>
       <p>
         All unbought prizes in the display move up one slot. The winner gets to see the next prize and
-        decide which empty slot to place it in. (Winners placing new prizes can't use the upper slots for the
-        first few turns — a slot only becomes available once a prize has risen up into it "naturally." This
-        makes the initial ramp-up, before players have drawn many cards, gentler.) Two players then draw a
-        card from their money decks: the player who won the auction, and the player who first passed.
+        decide which slot to place it in — including one that already holds a prize, stacking it there.
+        (Winners placing new prizes can't use the upper slots for the first few turns — a slot only becomes
+        available once a prize has risen up into it "naturally." This makes the initial ramp-up, before
+        players have drawn many cards, gentler.) Two players then draw a card from their money decks: the
+        player who won the auction, and the player who first passed.
       </p>
 
       <h4>Prizes &amp; point values</h4>
