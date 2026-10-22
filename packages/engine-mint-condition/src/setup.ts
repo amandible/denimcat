@@ -28,9 +28,9 @@ export function drawUntilUnique(
 }
 
 /**
- * The setup procedure for the six price slots: draw 3 individually (always
+ * The setup procedure for the six price slots: draw 4 individually (always
  * mutually distinct, since they're drawn without replacement from a set of
- * unique-valued cards), then two 2-card sums, then a 3-card sum topped up
+ * unique-valued cards), then one 2-card sum, then a 3-card sum topped up
  * with a 4th card only if it isn't yet the highest of the five prices
  * already determined. Any sum step whose result repeats an
  * already-determined price is redrawn as a whole unit — its cards go back
@@ -51,17 +51,7 @@ export function computePrices(rng: () => number = Math.random): number[] {
     pool = [...pool, ...cards];
   }
 
-  const individually = draw(3);
-
-  const price4Attempt = drawUntilUnique(
-    () => {
-      const cards = draw(2);
-      return { value: sum(cards), cards };
-    },
-    returnToPool,
-    individually,
-  );
-  const price4 = price4Attempt.value;
+  const individually = draw(4);
 
   const price5Attempt = drawUntilUnique(
     () => {
@@ -69,11 +59,11 @@ export function computePrices(rng: () => number = Math.random): number[] {
       return { value: sum(cards), cards };
     },
     returnToPool,
-    [...individually, price4],
+    individually,
   );
   const price5 = price5Attempt.value;
 
-  const priceSoFar = [...individually, price4, price5];
+  const priceSoFar = [...individually, price5];
   const price6Attempt = drawUntilUnique(
     () => {
       const threeCards = draw(3);
@@ -91,7 +81,7 @@ export function computePrices(rng: () => number = Math.random): number[] {
   );
   const price6 = price6Attempt.value;
 
-  return [...individually, price4, price5, price6];
+  return [...individually, price5, price6];
 }
 
 const BASE_PRIZES: Array<[PrizeColor, number]> = [

@@ -40,6 +40,10 @@ export function RulesContent() {
         players have drawn many cards, gentler.) Two players then draw a card from their money decks: the
         player who won the auction, and the player who first passed.
       </p>
+      <p>
+        A card that moves up out of the highest slot in the display is discarded permanently; a randomly
+        drawn prize enters in the lowest slot to replace it.
+      </p>
 
       <h4>Prizes &amp; point values</h4>
       <p>For a two-player game:</p>

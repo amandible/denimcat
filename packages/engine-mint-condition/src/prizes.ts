@@ -1,4 +1,4 @@
-import type { EngineResult, GameState, SeatId } from './types';
+import type { EngineResult, GameState, PrizeCard, SeatId } from './types';
 import { cloneState, pushLog, startAuction } from './state';
 import { ok, err } from './result';
 import { drawPostAuctionCards } from './decks';
@@ -7,8 +7,13 @@ import { applyGameEndIfDone } from './scoring';
 /**
  * Every unbought prize drifts one slot toward the priciest end (index 5) —
  * unsold prizes get more expensive over time. A prize already at index 5
- * that goes unbought again is permanently removed from the game rather
- * than staying capped there.
+ * that goes unbought again is permanently discarded — but, per the
+ * designer's latest revision, replaced by a freshly drawn prize entering at
+ * the now-empty bottom slot (index 0), one new prize per discarded one, so
+ * the display doesn't just shrink over a long game. Fails soft (fewer, or
+ * zero, replacements) once the prize deck itself runs dry — same
+ * fail-soft spirit as every other deck-exhaustion point in this engine,
+ * not a special case.
  *
  * Also unlocks the top two slots for manual placement (see
  * `GameState.unlockedUpperSlots`) the first time a prize naturally drifts
@@ -21,13 +26,22 @@ export function shiftDisplay(state: GameState): GameState {
   const original = next.priceSlots.map((slot) => slot.prizes);
   const upperIndices = [lastIndex - 1, lastIndex];
 
-  if (next.priceSlots[lastIndex].prizes.length > 0) {
-    next.discardPile = [...next.discardPile, ...next.priceSlots[lastIndex].prizes];
+  const agedOut = next.priceSlots[lastIndex].prizes;
+  if (agedOut.length > 0) {
+    next.discardPile = [...next.discardPile, ...agedOut];
   }
   next.priceSlots[lastIndex].prizes = []; // permanently removed from the game
   for (let i = lastIndex - 1; i >= 0; i--) {
     next.priceSlots[i + 1].prizes = original[i];
     next.priceSlots[i].prizes = [];
+  }
+
+  const replacements: PrizeCard[] = [];
+  for (let i = 0; i < agedOut.length && next.prizeDeck.length > 0; i++) {
+    replacements.push(next.prizeDeck.pop()!);
+  }
+  if (replacements.length > 0) {
+    next.priceSlots[0].prizes = [...next.priceSlots[0].prizes, ...replacements];
   }
 
   const newlyUnlocked = upperIndices.filter(

@@ -46,12 +46,12 @@ describe('full 2-player game smoke test', () => {
       expect(state.phase).toBe('awaiting-prize-choice');
       expect(state.auction.winnerSeat).toBe(bidderSeat);
 
-      const affordable = state.priceSlots.flatMap((slot) =>
-        slot.price <= cheapest.amount ? slot.prizes : [],
-      );
-      if (affordable.length === 0) break; // can't afford anything yet, stop this smoke run early
+      // No choice of slot under the current rules: must take from the
+      // priciest occupied slot within the bid (see eligibleTakeSlotIndex).
+      const eligibleSlot = [...state.priceSlots].reverse().find((slot) => slot.price <= cheapest.amount && slot.prizes.length > 0);
+      if (!eligibleSlot) break; // can't afford anything yet, stop this smoke run early
 
-      const chosen = affordable[0];
+      const chosen = eligibleSlot.prizes[0];
       const beforeScoreSeats = [...state.seats];
       const takeResult = takePrize(state, bidderSeat, chosen.id);
       expect(takeResult.ok).toBe(true);

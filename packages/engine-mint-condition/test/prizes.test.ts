@@ -85,6 +85,77 @@ describe('shiftDisplay', () => {
     const next = shiftDisplay(state);
     expect(next.unlockedUpperSlots.sort()).toEqual([4, 5]);
   });
+
+  it('replaces a prize that ages out of the priciest slot with a freshly drawn one in the now-empty cheapest slot', () => {
+    const state = makeState({
+      prizeDeck: [prize('fresh', 'purple', 3)],
+      priceSlots: [
+        { price: 1, prizes: [] },
+        { price: 2, prizes: [] },
+        { price: 3, prizes: [] },
+        { price: 4, prizes: [] },
+        { price: 5, prizes: [] },
+        { price: 6, prizes: [prize('c', 'yellow', 5)] },
+      ],
+    });
+    const next = shiftDisplay(state);
+    expect(next.discardPile).toEqual([prize('c', 'yellow', 5)]); // the aged-out prize is still gone for good
+    expect(next.priceSlots[0].prizes).toEqual([prize('fresh', 'purple', 3)]); // its replacement lands at the bottom
+    expect(next.prizeDeck).toEqual([]); // drawn from the deck, not conjured
+  });
+
+  it('draws one replacement per aged-out prize when the priciest slot holds more than one (stacking)', () => {
+    const state = makeState({
+      prizeDeck: [prize('fresh-1', 'purple', 3), prize('fresh-2', 'orange', 2)],
+      priceSlots: [
+        { price: 1, prizes: [] },
+        { price: 2, prizes: [] },
+        { price: 3, prizes: [] },
+        { price: 4, prizes: [] },
+        { price: 5, prizes: [] },
+        { price: 6, prizes: [prize('c', 'yellow', 5), prize('d', 'red', 1)] },
+      ],
+    });
+    const next = shiftDisplay(state);
+    // Drawn from the end of prizeDeck, same convention as everywhere else
+    // this engine draws a prize — so 'fresh-2' comes out first.
+    expect(next.priceSlots[0].prizes).toEqual([prize('fresh-2', 'orange', 2), prize('fresh-1', 'purple', 3)]);
+    expect(next.prizeDeck).toEqual([]);
+  });
+
+  it('does not draw a replacement when nothing actually aged out of the priciest slot (it was already empty)', () => {
+    const state = makeState({
+      prizeDeck: [prize('untouched', 'green', 4)],
+      priceSlots: [
+        { price: 1, prizes: [prize('a', 'red', 1)] },
+        { price: 2, prizes: [] },
+        { price: 3, prizes: [] },
+        { price: 4, prizes: [] },
+        { price: 5, prizes: [] },
+        { price: 6, prizes: [] },
+      ],
+    });
+    const next = shiftDisplay(state);
+    expect(next.priceSlots[0].prizes).toEqual([]); // the bottom slot just stays empty, no draw triggered
+    expect(next.prizeDeck).toEqual([prize('untouched', 'green', 4)]); // untouched
+  });
+
+  it('fails soft (fewer replacements than aged-out prizes) once the prize deck runs dry', () => {
+    const state = makeState({
+      prizeDeck: [],
+      priceSlots: [
+        { price: 1, prizes: [] },
+        { price: 2, prizes: [] },
+        { price: 3, prizes: [] },
+        { price: 4, prizes: [] },
+        { price: 5, prizes: [] },
+        { price: 6, prizes: [prize('c', 'yellow', 5)] },
+      ],
+    });
+    const next = shiftDisplay(state);
+    expect(next.discardPile).toEqual([prize('c', 'yellow', 5)]); // the discard still happens
+    expect(next.priceSlots[0].prizes).toEqual([]); // just nothing to replace it with
+  });
 });
 
 describe('eligibleTakeSlotIndex', () => {
