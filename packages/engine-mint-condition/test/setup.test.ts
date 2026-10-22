@@ -1,43 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrizePool, computePrices, dealGame, drawUntilUnique } from '../src/setup';
-
-describe('drawUntilUnique', () => {
-  it('returns the first attempt immediately when it does not collide', () => {
-    let calls = 0;
-    const undone: number[][] = [];
-    const result = drawUntilUnique(
-      () => {
-        calls++;
-        return { value: 7, cards: [3, 4] };
-      },
-      (cards) => undone.push(cards),
-      [1, 2, 3],
-    );
-    expect(result).toEqual({ value: 7, cards: [3, 4] });
-    expect(calls).toBe(1);
-    expect(undone).toEqual([]);
-  });
-
-  it('undoes each colliding attempt and keeps retrying until a unique value is drawn', () => {
-    const attempts = [
-      { value: 5, cards: [2, 3] }, // collides
-      { value: 5, cards: [1, 4] }, // collides again
-      { value: 9, cards: [4, 5] }, // finally unique
-    ];
-    let call = 0;
-    const undone: number[][] = [];
-    const result = drawUntilUnique(
-      () => attempts[call++],
-      (cards) => undone.push(cards),
-      [5, 6, 7],
-    );
-    expect(result).toEqual({ value: 9, cards: [4, 5] });
-    expect(call).toBe(3);
-    expect(undone).toEqual([[2, 3], [1, 4]]);
-  });
-});
+import { buildPrizePool, computePrices, dealGame } from '../src/setup';
 
 describe('computePrices', () => {
+  const TILES = [
+    [2, 4],
+    [5, 9],
+    [7, 11],
+    [13, 15],
+    [16, 20],
+    [22, 24],
+  ];
+
   it('produces exactly six positive-integer prices', () => {
     const prices = computePrices(() => 0.42);
     expect(prices).toHaveLength(6);
@@ -47,7 +20,20 @@ describe('computePrices', () => {
     }
   });
 
-  it('never produces a repeated price, across many real-random trials', () => {
+  it('every price is one of its own tile\'s two printed faces, in tile order', () => {
+    const prices = computePrices(() => 0.9);
+    prices.forEach((price, i) => {
+      expect(TILES[i]).toContain(price);
+    });
+  });
+
+  it('an rng below 0.5 always picks the lower face of each tile; at or above always picks the higher', () => {
+    expect(computePrices(() => 0)).toEqual(TILES.map(([low]) => low));
+    expect(computePrices(() => 0.5)).toEqual(TILES.map(([, high]) => high));
+    expect(computePrices(() => 0.999)).toEqual(TILES.map(([, high]) => high));
+  });
+
+  it('never produces a repeated price, across many real-random trials (every face value is already unique)', () => {
     for (let i = 0; i < 300; i++) {
       const prices = computePrices();
       expect(new Set(prices).size).toBe(6);

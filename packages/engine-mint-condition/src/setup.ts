@@ -8,80 +8,25 @@ const SEATS_BY_COUNT: Record<PlayerCount, SeatId[]> = {
 };
 
 /**
- * Repeatedly attempts a draw until its value doesn't collide with anything
- * in `existing`, undoing (returning to the pool) each rejected attempt's
- * cards before retrying — "repeated prices aren't allowed; if one would
- * happen, put those cards back and redraw." Decoupled from the actual
- * pool/shuffle mechanics so the retry behavior itself can be unit tested
- * with a scripted sequence of attempts, independent of real randomness.
+ * Six fixed double-sided physical tiles, each printed with two possible
+ * prices — replaces the earlier card-draw-and-sum method, which the
+ * designer found produced too wide a spread of possible price sets for a
+ * reliably balanced game. Every face value across all twelve is already
+ * distinct, so (unlike the old method) there's no possibility of a
+ * repeated price to guard against.
  */
-export function drawUntilUnique(
-  draw: () => { value: number; cards: number[] },
-  undo: (cards: number[]) => void,
-  existing: number[],
-): { value: number; cards: number[] } {
-  while (true) {
-    const attempt = draw();
-    if (!existing.includes(attempt.value)) return attempt;
-    undo(attempt.cards);
-  }
-}
+const PRICE_TILE_FACES: ReadonlyArray<readonly [number, number]> = [
+  [2, 4],
+  [5, 9],
+  [7, 11],
+  [13, 15],
+  [16, 20],
+  [22, 24],
+];
 
-/**
- * The setup procedure for the six price slots: draw 4 individually (always
- * mutually distinct, since they're drawn without replacement from a set of
- * unique-valued cards), then one 2-card sum, then a 3-card sum topped up
- * with a 4th card only if it isn't yet the highest of the five prices
- * already determined. Any sum step whose result repeats an
- * already-determined price is redrawn as a whole unit — its cards go back
- * into the pool first.
- */
+/** The setup procedure for the six price slots: flip each of the six tiles above to a random one of its two faces. */
 export function computePrices(rng: () => number = Math.random): number[] {
-  let pool = Array.from({ length: 13 }, (_, i) => i + 1);
-  const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
-
-  function draw(count: number): number[] {
-    pool = shuffle(pool, rng);
-    const drawn = pool.slice(0, count);
-    pool = pool.slice(count);
-    return drawn;
-  }
-
-  function returnToPool(cards: number[]): void {
-    pool = [...pool, ...cards];
-  }
-
-  const individually = draw(4);
-
-  const price5Attempt = drawUntilUnique(
-    () => {
-      const cards = draw(2);
-      return { value: sum(cards), cards };
-    },
-    returnToPool,
-    individually,
-  );
-  const price5 = price5Attempt.value;
-
-  const priceSoFar = [...individually, price5];
-  const price6Attempt = drawUntilUnique(
-    () => {
-      const threeCards = draw(3);
-      let cards = threeCards;
-      let value = sum(threeCards);
-      if (value <= Math.max(...priceSoFar)) {
-        const fourth = draw(1);
-        cards = [...threeCards, ...fourth];
-        value += fourth[0];
-      }
-      return { value, cards };
-    },
-    returnToPool,
-    priceSoFar,
-  );
-  const price6 = price6Attempt.value;
-
-  return [...individually, price5, price6];
+  return PRICE_TILE_FACES.map(([low, high]) => (rng() < 0.5 ? low : high));
 }
 
 const BASE_PRIZES: Array<[PrizeColor, number]> = [

@@ -13,7 +13,10 @@ export function RulesContent() {
       <p>The players will compete, over a series of auctions, to buy prize cards.</p>
 
       <h4>Setup</h4>
-      <p>At the start of the game, the six price slots are set up semi-randomly and arranged from low to high.</p>
+      <p>
+        The six price slots come from six double-sided tiles, each randomly showing one of its two printed
+        prices: 2/4, 5/9, 7/11, 13/15, 16/20, and 22/24 — arranged from low to high.
+      </p>
       <p>
         Three prizes are drawn and placed in the second, third, and fourth price slots. (Each slot can hold
         one or more prizes, or be empty.) Each player draws two cards from their money deck. The game begins.
