@@ -1,34 +1,28 @@
-import { eligibleTakeSlotIndex, type PriceSlot } from '@denimcat/engine-mint-condition';
-import { PriceSlotTrack } from './PriceSlotTrack';
-
+/**
+ * No board shown here — the main display's own PriceSlotTrack highlights
+ * the one eligible slot and handles the actual click (see GameView, which
+ * wires eligibleSlotIndex/onPrizeClick onto it). This panel is just the
+ * instruction and the skip fallback.
+ */
 export function PrizeChoicePanel({
-  priceSlots,
   bidAmount,
-  onTakePrize,
+  hasEligiblePrize,
   onSkip,
 }: {
-  priceSlots: PriceSlot[];
   bidAmount: number;
-  onTakePrize: (prizeId: string) => void;
+  hasEligiblePrize: boolean;
   onSkip: () => void;
 }) {
-  // No choice of slot: the engine determines the one slot a prize must come
-  // from this round (the priciest occupied slot within the bid) — only its
-  // prizes are clickable. If it holds more than one, that's the only real
-  // choice here.
-  const slotIndex = eligibleTakeSlotIndex(priceSlots, bidAmount);
-
   return (
     <div className="panel">
-      <h3>
-        {slotIndex === null
-          ? `You won! Nothing displayed is priced within your bid (${bidAmount}).`
-          : `You won! Choose a prize from the highlighted slot (price ≤ ${bidAmount}).`}
-      </h3>
-      <PriceSlotTrack slots={priceSlots} onPrizeClick={onTakePrize} eligibleSlotIndex={slotIndex ?? undefined} />
-      {slotIndex === null && (
+      <h3>You won!</h3>
+      {hasEligiblePrize ? (
+        <p style={{ marginBottom: 0 }}>Click your prize in the highlighted slot above (price ≤ {bidAmount}).</p>
+      ) : (
         <>
-          <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 10 }}>You still pay your bid, but take no prize.</p>
+          <p style={{ color: 'var(--muted)', fontSize: 13 }}>
+            Nothing displayed is priced within your bid ({bidAmount}) — you still pay it, but take no prize.
+          </p>
           <button className="btn btn-primary" onClick={onSkip} style={{ marginTop: 8 }}>
             Continue without a prize
           </button>

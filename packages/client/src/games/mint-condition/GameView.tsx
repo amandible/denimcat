@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SeatId } from '@denimcat/engine-mint-condition';
+import { eligibleTakeSlotIndex, type SeatId } from '@denimcat/engine-mint-condition';
 import type { MintConditionConnection } from './useMintConditionActions';
 import { PriceSlotTrack } from './components/PriceSlotTrack';
 import { AuctionStatusPanel } from './components/AuctionStatusPanel';
@@ -35,6 +35,23 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   const isWinner = !!mySeat && gameState.auction.winnerSeat === mySeat;
   const myHand = mySeat ? gameState.players[mySeat].hand ?? [] : [];
 
+  // Both post-auction choices (which prize to take, where to place the new
+  // one) now act directly on the main board's own PriceSlotTrack instead of
+  // showing a second copy of it in the side panel — one source of truth for
+  // "click here," not a board plus a redundant mini-board beside it.
+  const highestBidAmount = gameState.auction.highestBid?.amount;
+  const showingPrizeChoice = !!mySeat && isWinner && gameState.phase === 'awaiting-prize-choice' && highestBidAmount !== undefined;
+  const eligibleSlotIndex = showingPrizeChoice ? eligibleTakeSlotIndex(gameState.priceSlots, highestBidAmount!) : null;
+
+  const showingPlacement = !!mySeat && isWinner && gameState.phase === 'awaiting-new-prize-placement' && !!gameState.revealedPrize;
+  const lastSlotIndex = gameState.priceSlots.length - 1;
+  const upperSlotIndices = new Set([lastSlotIndex - 1, lastSlotIndex]);
+  const placeableSlots = showingPlacement
+    ? new Set(
+        gameState.priceSlots.map((_, i) => i).filter((i) => !upperSlotIndices.has(i) || gameState.unlockedUpperSlots.includes(i)),
+      )
+    : undefined;
+
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px', display: 'flex', gap: 28, flexWrap: 'wrap' }}>
       <div style={{ flex: '2 1 420px' }}>
@@ -44,7 +61,13 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
             Rules
           </button>
         </div>
-        <PriceSlotTrack slots={gameState.priceSlots} />
+        <PriceSlotTrack
+          slots={gameState.priceSlots}
+          eligibleSlotIndex={eligibleSlotIndex ?? undefined}
+          onPrizeClick={showingPrizeChoice ? (prizeId) => connection.takePrize(prizeId) : undefined}
+          placeableSlots={placeableSlots}
+          onPlaceInSlot={showingPlacement ? (slotIndex) => connection.placeNewPrize(slotIndex) : undefined}
+        />
         <div style={{ marginTop: 16 }}>
           <AuctionStatusPanel auction={gameState.auction} />
         </div>
@@ -77,25 +100,19 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           </div>
         )}
 
-        {mySeat && isWinner && gameState.phase === 'awaiting-prize-choice' && gameState.auction.highestBid && (
+        {showingPrizeChoice && (
           <div style={{ marginTop: 16 }}>
             <PrizeChoicePanel
-              priceSlots={gameState.priceSlots}
-              bidAmount={gameState.auction.highestBid.amount}
-              onTakePrize={(prizeId) => connection.takePrize(prizeId)}
+              bidAmount={highestBidAmount!}
+              hasEligiblePrize={eligibleSlotIndex !== null}
               onSkip={() => connection.skipPrizeChoice()}
             />
           </div>
         )}
 
-        {mySeat && isWinner && gameState.phase === 'awaiting-new-prize-placement' && gameState.revealedPrize && (
+        {showingPlacement && (
           <div style={{ marginTop: 16 }}>
-            <NewPrizeSlotPicker
-              revealedPrize={gameState.revealedPrize}
-              priceSlots={gameState.priceSlots}
-              unlockedUpperSlots={gameState.unlockedUpperSlots}
-              onPlace={(slotIndex) => connection.placeNewPrize(slotIndex)}
-            />
+            <NewPrizeSlotPicker revealedPrize={gameState.revealedPrize!} />
           </div>
         )}
 
