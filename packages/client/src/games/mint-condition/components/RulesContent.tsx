@@ -30,10 +30,10 @@ export function RulesContent() {
         Following players in turn may raise the bid (saying a higher number, that they could also pay
         exactly) or pass. When all but one player have passed, the winning player pays their bid (discarding
         the cards) and takes their choice of prizes from the highest slot whose price is less than or equal
-        to their bid. In other words, if the two lowest occupied slots cost 3 and 8, a bid between 3 and 7
-        (inclusive) gets you a prize from the lower one — there's no choosing a cheaper slot instead, only
-        (if that slot holds more than one prize) which of its prizes to take. No change is given! If you bid
-        20 and take a prize whose price is 8, you still pay 20.
+        to their bid. In other words, if the two lowest slots cost 3 and 8, then a bid between 3 and 7
+        (inclusive) gets you a prize from the lowest slot — there's no choosing a different slot instead,
+        only (if that slot holds more than one prize) which of its prizes to take. No change is given! If you
+        bid 20 and take a prize whose price is 8, you still pay 20.
       </p>
       <p>
         All unbought prizes in the display move up one slot. The winner gets to see the next prize and
@@ -46,6 +46,11 @@ export function RulesContent() {
       <p>
         A card that moves up out of the highest slot in the display is discarded permanently; a randomly
         drawn prize enters in the lowest slot to replace it.
+      </p>
+      <p>
+        When a player wins with a bid that points to an empty slot, or a bid lower than the lowest slot, they
+        have their choice of three rewards: draw two money cards, move all prizes in the display up one extra
+        space, or add two additional prizes to the lowest slot.
       </p>
 
       <h4>Prizes &amp; point values</h4>

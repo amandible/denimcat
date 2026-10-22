@@ -1,17 +1,27 @@
+import type { AuctionReward } from '@denimcat/engine-mint-condition';
+
+const REWARD_LABELS: Record<AuctionReward, string> = {
+  draw_cards: 'Draw two money cards',
+  extra_shift: 'Move all prizes up one extra space',
+  add_prizes: 'Add two prizes to the lowest slot',
+};
+
 /**
  * No board shown here — the main display's own PriceSlotTrack highlights
  * the one eligible slot and handles the actual click (see GameView, which
  * wires eligibleSlotIndex/onPrizeClick onto it). This panel is just the
- * instruction and the skip fallback.
+ * instruction, or — when the bid points to nothing (an empty slot, or
+ * below the lowest slot's price) — the three-way consolation reward
+ * choice, per the designer's rule.
  */
 export function PrizeChoicePanel({
   bidAmount,
   hasEligiblePrize,
-  onSkip,
+  onChooseReward,
 }: {
   bidAmount: number;
   hasEligiblePrize: boolean;
-  onSkip: () => void;
+  onChooseReward: (reward: AuctionReward) => void;
 }) {
   return (
     <div className="panel">
@@ -21,11 +31,15 @@ export function PrizeChoicePanel({
       ) : (
         <>
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-            Nothing displayed is priced within your bid ({bidAmount}) — you still pay it, but take no prize.
+            Your bid of {bidAmount} points to nothing you can take — you still pay it, but choose a reward instead:
           </p>
-          <button className="btn btn-primary" onClick={onSkip} style={{ marginTop: 8 }}>
-            Continue without a prize
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(Object.keys(REWARD_LABELS) as AuctionReward[]).map((reward) => (
+              <button key={reward} className="btn btn-primary" onClick={() => onChooseReward(reward)}>
+                {REWARD_LABELS[reward]}
+              </button>
+            ))}
+          </div>
         </>
       )}
     </div>

@@ -11,3 +11,9 @@ export function isCardArray(value: unknown): value is number[] {
 export function isSlotIndex(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0 && (value as number) < 6;
 }
+
+const AUCTION_REWARDS = new Set(['draw_cards', 'extra_shift', 'add_prizes']);
+
+export function isAuctionReward(value: unknown): value is 'draw_cards' | 'extra_shift' | 'add_prizes' {
+  return typeof value === 'string' && AUCTION_REWARDS.has(value);
+}

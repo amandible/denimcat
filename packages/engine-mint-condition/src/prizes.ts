@@ -1,7 +1,7 @@
 import type { EngineResult, GameState, PrizeCard, SeatId } from './types';
 import { cloneState, pushLog, startAuction } from './state';
 import { ok, err } from './result';
-import { drawPostAuctionCards } from './decks';
+import { drawCardForSeat, drawPostAuctionCards } from './decks';
 import { applyGameEndIfDone } from './scoring';
 
 /**
@@ -69,9 +69,19 @@ function concludeAuction(state: GameState): GameState {
   return next;
 }
 
-/** Shared tail for both taking and skipping a prize: shift the display, then move on. */
-function afterPrizeChoice(state: GameState): GameState {
+/**
+ * Shared tail for every way a prize-choice round can resolve (taking a
+ * prize, or choosing a consolation reward): shift the display, then move
+ * on. `afterShift` is an optional extra mutation applied right after that
+ * shift but before the game-end check and the reveal/conclude branch — the
+ * "add two prizes to the lowest slot" reward needs this exact slot (so the
+ * new prizes land in the slot the shift just emptied, rather than being
+ * immediately swept up by it) and needs to be accounted for before
+ * deciding whether the game just ended.
+ */
+function afterPrizeChoice(state: GameState, afterShift?: (s: GameState) => GameState): GameState {
   let next = shiftDisplay(state);
+  if (afterShift) next = afterShift(next);
   next = applyGameEndIfDone(next);
   if (next.phase === 'ended') return next;
 
@@ -88,20 +98,39 @@ function afterPrizeChoice(state: GameState): GameState {
 }
 
 /**
- * The one slot a prize must be taken from under the given bid: the
- * priciest occupied slot priced at or below `bidAmount` (rules.md: "takes
- * their choice of prizes from the highest slot whose price is less than or
- * equal to their bid"). There's no choice of SLOT — only, if that slot
- * holds more than one prize, a choice of which one. Null means nothing
- * displayed is affordable (skipPrizeChoice territory). Exported so the
- * client can highlight the same slot and gate which prizes are clickable,
- * without duplicating this scan.
+ * The slot a bid of `bidAmount` points to: the priciest slot priced at or
+ * below it, found purely by price position — NOT the priciest OCCUPIED
+ * such slot. Confirmed with the designer: a bid can "point to" an empty
+ * slot (or to nothing at all, if it doesn't even reach the cheapest slot's
+ * price) even while a cheaper slot sits occupied — that's exactly the
+ * trigger for the consolation-reward choice (see chooseAuctionReward), not
+ * a fallback to the cheaper slot. Returns null only when the bid is below
+ * the cheapest slot's price; a non-null result can still point at an empty
+ * slot, which callers must check for separately (see eligibleTakeSlotIndex
+ * below, which folds that check in for the common case).
  */
-export function eligibleTakeSlotIndex(priceSlots: GameState['priceSlots'], bidAmount: number): number | null {
+export function slotIndexForBid(priceSlots: GameState['priceSlots'], bidAmount: number): number | null {
   for (let i = priceSlots.length - 1; i >= 0; i--) {
-    if (priceSlots[i].price <= bidAmount && priceSlots[i].prizes.length > 0) return i;
+    if (priceSlots[i].price <= bidAmount) return i;
   }
   return null;
+}
+
+/**
+ * The one slot a prize can actually be taken from under the given bid:
+ * slotIndexForBid's result, but only when that slot currently holds a
+ * prize. Null covers both ways rules.md describes ending up with nothing
+ * to take — "a bid that points to an empty slot" and "a bid lower than the
+ * lowest slot" — since neither needs to be distinguished for gameplay
+ * purposes (chooseAuctionReward treats them identically). There's no
+ * choice of SLOT when this is non-null — only, if that slot holds more
+ * than one prize, a choice of which one. Exported so the client can
+ * highlight the same slot and gate which prizes are clickable, without
+ * duplicating this logic.
+ */
+export function eligibleTakeSlotIndex(priceSlots: GameState['priceSlots'], bidAmount: number): number | null {
+  const slotIndex = slotIndexForBid(priceSlots, bidAmount);
+  return slotIndex !== null && priceSlots[slotIndex].prizes.length > 0 ? slotIndex : null;
 }
 
 export function takePrize(state: GameState, seat: SeatId, prizeId: string): EngineResult {
@@ -115,7 +144,7 @@ export function takePrize(state: GameState, seat: SeatId, prizeId: string): Engi
   const bidAmount = (state.auction.highestBid as NonNullable<GameState['auction']['highestBid']>).amount;
   const slotIndex = eligibleTakeSlotIndex(state.priceSlots, bidAmount);
   if (slotIndex === null) {
-    return err('NO_AFFORDABLE_PRIZE', 'Nothing displayed is affordable — skip instead.');
+    return err('NO_AFFORDABLE_PRIZE', 'Nothing to take this round — choose a reward instead.');
   }
   if (!state.priceSlots[slotIndex].prizes.some((p) => p.id === prizeId)) {
     return err(
@@ -134,20 +163,32 @@ export function takePrize(state: GameState, seat: SeatId, prizeId: string): Engi
   return ok(afterPrizeChoice(next));
 }
 
+export type AuctionReward = 'draw_cards' | 'extra_shift' | 'add_prizes';
+
 /**
- * The winner may forfeit taking a prize only when genuinely nothing in the
- * display is priced at or below their winning bid — confirmed directly with
- * the designer: they still pay their bid (already discarded when the
- * auction resolved), take nothing, and the game proceeds exactly as if a
- * prize had been taken (display still shifts, then the normal reveal/draw/
- * next-auction flow continues).
+ * The consolation choice when a winning bid comes up with nothing to take
+ * — either it doesn't reach the cheapest slot's price, or the one slot it
+ * points to (see slotIndexForBid) is currently empty, even if a cheaper
+ * slot is occupied. Replaces the old plain "pay your bid, take nothing"
+ * skip entirely — confirmed with the designer. They still pay their bid
+ * (already discarded when the auction resolved) and choose exactly one of:
+ * - 'draw_cards': draw two money cards.
+ * - 'extra_shift': shift the display one extra space (on top of the
+ *   normal end-of-round shift every auction gets regardless) — reuses
+ *   shiftDisplay verbatim, discard-and-replace and upper-slot-unlock side
+ *   effects included.
+ * - 'add_prizes': two prizes drawn blind from the prize deck (no reveal,
+ *   no choice) land in the lowest slot, right after the normal
+ *   end-of-round shift empties it — see afterPrizeChoice's `afterShift`.
+ * Each fails soft (fewer or zero cards/prizes) if its own deck runs dry,
+ * same convention as every other deck-exhaustion point in this engine.
  */
-export function skipPrizeChoice(state: GameState, seat: SeatId): EngineResult {
+export function chooseAuctionReward(state: GameState, seat: SeatId, reward: AuctionReward): EngineResult {
   if (state.phase !== 'awaiting-prize-choice') {
     return err('NOT_AWAITING_PRIZE_CHOICE', 'No prize is currently waiting to be chosen.');
   }
   if (state.auction.winnerSeat !== seat) {
-    return err('NOT_THE_WINNER', 'Only the auction winner may skip taking a prize.');
+    return err('NOT_THE_WINNER', 'Only the auction winner may choose a reward.');
   }
 
   const bidAmount = (state.auction.highestBid as NonNullable<GameState['auction']['highestBid']>).amount;
@@ -155,9 +196,29 @@ export function skipPrizeChoice(state: GameState, seat: SeatId): EngineResult {
     return err('AFFORDABLE_PRIZE_AVAILABLE', 'At least one displayed prize is affordable and must be taken instead.');
   }
 
+  if (reward === 'draw_cards') {
+    let next = drawCardForSeat(state, seat);
+    next = drawCardForSeat(next, seat);
+    pushLog(next, `${seat} took no prize this round — drew two extra cards instead.`);
+    return ok(afterPrizeChoice(next));
+  }
+
+  if (reward === 'extra_shift') {
+    const next = shiftDisplay(state);
+    pushLog(next, `${seat} took no prize this round — shifted the display an extra space instead.`);
+    return ok(afterPrizeChoice(next));
+  }
+
   const next = cloneState(state);
-  pushLog(next, `${seat} took no prize this round.`);
-  return ok(afterPrizeChoice(next));
+  pushLog(next, `${seat} took no prize this round — added two prizes to the lowest slot instead.`);
+  return ok(
+    afterPrizeChoice(next, (s) => {
+      const drawn: PrizeCard[] = [];
+      for (let i = 0; i < 2 && s.prizeDeck.length > 0; i++) drawn.push(s.prizeDeck.pop()!);
+      if (drawn.length > 0) s.priceSlots[0].prizes = [...s.priceSlots[0].prizes, ...drawn];
+      return s;
+    }),
+  );
 }
 
 /**

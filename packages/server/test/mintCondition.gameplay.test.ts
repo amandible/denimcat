@@ -180,17 +180,17 @@ describe('Mint Condition room + game flow over real sockets', () => {
     expect(peek.gameState.phase).toBe('awaiting-prize-choice');
     expect(peek.gameState.auction.winnerSeat).toBe(activeSeat);
 
-    // No choice of slot: must take from the priciest occupied slot within
-    // the bid — scan from the priciest end down, same as the engine's
-    // eligibleTakeSlotIndex.
-    const eligibleSlot = [...peek.gameState.priceSlots]
-      .reverse()
-      .find((slot: any) => slot.price <= card && slot.prizes.length > 0);
+    // No choice of slot: the bid points to exactly one slot — the priciest
+    // one at or below it, found by price position alone (not a fallback to
+    // a cheaper occupied slot — see the engine's slotIndexForBid). Only if
+    // that specific slot is occupied is there a prize to take at all.
+    const matchedSlot = [...peek.gameState.priceSlots].reverse().find((slot: any) => slot.price <= card);
+    const eligibleSlot = matchedSlot && matchedSlot.prizes.length > 0 ? matchedSlot : null;
     let after: any;
     if (eligibleSlot) {
       after = await emitAck<any>(sockets[activeSeat], 'take_prize', { roomCode, prizeId: eligibleSlot.prizes[0].id });
     } else {
-      after = await emitAck<any>(sockets[activeSeat], 'skip_prize_choice', { roomCode });
+      after = await emitAck<any>(sockets[activeSeat], 'choose_auction_reward', { roomCode, reward: 'draw_cards' });
     }
     expect(after.ok).toBe(true);
 
@@ -217,6 +217,7 @@ describe('Mint Condition room + game flow over real sockets', () => {
       ['place_bid', { roomCode, cards: [14] }], // out of 1-13 range
       ['pass', {}], // missing roomCode
       ['take_prize', { roomCode, prizeId: 123 }], // wrong type
+      ['choose_auction_reward', { roomCode, reward: 'free_money' }], // not one of the three valid rewards
       ['place_new_prize', { roomCode, slotIndex: 'zero' }],
       ['place_new_prize', { roomCode, slotIndex: 99 }],
     ];

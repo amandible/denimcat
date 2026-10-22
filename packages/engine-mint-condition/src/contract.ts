@@ -1,4 +1,5 @@
 import type { ActionResult, RoomLifecycleClientToServerEvents, RoomLifecycleServerToClientEvents } from '@denimcat/shared';
+import type { AuctionReward } from './prizes';
 import type { GameState, Phase, PlayerCount, PriceSlot, PrizeCard, SeatId } from './types';
 
 export interface MintConditionConfig {
@@ -97,7 +98,7 @@ export interface ClientToServerEvents
   place_bid: (payload: { roomCode: string; cards: number[] }, cb: (res: ActionResult) => void) => void;
   pass: (payload: { roomCode: string }, cb: (res: ActionResult) => void) => void;
   take_prize: (payload: { roomCode: string; prizeId: string }, cb: (res: ActionResult) => void) => void;
-  skip_prize_choice: (payload: { roomCode: string }, cb: (res: ActionResult) => void) => void;
+  choose_auction_reward: (payload: { roomCode: string; reward: AuctionReward }, cb: (res: ActionResult) => void) => void;
   place_new_prize: (payload: { roomCode: string; slotIndex: number }, cb: (res: ActionResult) => void) => void;
 }
 

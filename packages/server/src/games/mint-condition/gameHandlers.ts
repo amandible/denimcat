@@ -1,16 +1,16 @@
 import type { Socket } from 'socket.io';
 import {
+  chooseAuctionReward,
   pass,
   placeBid,
   placeNewPrize,
-  skipPrizeChoice,
   takePrize,
   type GameState,
   type MintConditionConfig,
   type SeatId,
 } from '@denimcat/engine-mint-condition';
 import { isNonEmptyString, type RoomStore } from '@denimcat/platform';
-import { isCardArray, isSlotIndex } from './validate';
+import { isAuctionReward, isCardArray, isSlotIndex } from './validate';
 
 type MintConditionStore = RoomStore<GameState, MintConditionConfig, SeatId>;
 
@@ -63,20 +63,23 @@ export function registerMintConditionHandlers(socket: Socket, store: MintConditi
       });
   });
 
-  socket.on('skip_prize_choice', (payload: { roomCode?: unknown }, cb: (res: unknown) => void) => {
-    if (!payload || !isNonEmptyString(payload.roomCode)) {
-      cb({ ok: false, error: INVALID_PAYLOAD });
-      return;
-    }
-    const { roomCode } = payload;
-    store
-      .applyAction(roomCode, socket.id, (state, seat) => skipPrizeChoice(state, seat))
-      .then(cb)
-      .catch((error) => {
-        console.error('[socket:mint-condition] skip_prize_choice failed:', error);
-        cb({ ok: false, error: INTERNAL_ERROR });
-      });
-  });
+  socket.on(
+    'choose_auction_reward',
+    (payload: { roomCode?: unknown; reward?: unknown }, cb: (res: unknown) => void) => {
+      if (!payload || !isNonEmptyString(payload.roomCode) || !isAuctionReward(payload.reward)) {
+        cb({ ok: false, error: INVALID_PAYLOAD });
+        return;
+      }
+      const { roomCode, reward } = payload;
+      store
+        .applyAction(roomCode, socket.id, (state, seat) => chooseAuctionReward(state, seat, reward))
+        .then(cb)
+        .catch((error) => {
+          console.error('[socket:mint-condition] choose_auction_reward failed:', error);
+          cb({ ok: false, error: INTERNAL_ERROR });
+        });
+    },
+  );
 
   socket.on(
     'place_new_prize',

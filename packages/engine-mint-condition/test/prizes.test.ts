@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { eligibleTakeSlotIndex, placeNewPrize, shiftDisplay, skipPrizeChoice, takePrize } from '../src/prizes';
+import {
+  chooseAuctionReward,
+  eligibleTakeSlotIndex,
+  placeNewPrize,
+  shiftDisplay,
+  slotIndexForBid,
+  takePrize,
+} from '../src/prizes';
 import { resolveAuctionWin } from '../src/bidding';
 import { makeState, prize } from './helpers';
 
@@ -158,6 +165,26 @@ describe('shiftDisplay', () => {
   });
 });
 
+describe('slotIndexForBid', () => {
+  const slots = [
+    { price: 1, prizes: [] },
+    { price: 2, prizes: [prize('cheap', 'red', 1)] },
+    { price: 3, prizes: [] },
+    { price: 4, prizes: [prize('mid', 'green', 2)] },
+    { price: 5, prizes: [prize('pricey', 'blue', 4)] },
+    { price: 6, prizes: [] },
+  ];
+
+  it('finds the priciest slot at or below the bid by price position alone — occupancy is irrelevant to the lookup itself', () => {
+    expect(slotIndexForBid(slots, 4)).toBe(3); // price-4 slot — happens to be occupied
+    expect(slotIndexForBid(slots, 3)).toBe(2); // price-3 slot — empty, but it's still what the bid points to
+  });
+
+  it("returns null only when the bid doesn't even reach the cheapest slot's price", () => {
+    expect(slotIndexForBid(slots, 0)).toBeNull();
+  });
+});
+
 describe('eligibleTakeSlotIndex', () => {
   const slots = [
     { price: 1, prizes: [] },
@@ -168,16 +195,20 @@ describe('eligibleTakeSlotIndex', () => {
     { price: 6, prizes: [] },
   ];
 
-  it('picks the priciest occupied slot within the bid, not just any affordable occupied slot', () => {
-    expect(eligibleTakeSlotIndex(slots, 4)).toBe(3); // the price-4 slot, not the cheaper price-2 one
+  it('returns the slot a bid points to, when that slot is occupied', () => {
+    expect(eligibleTakeSlotIndex(slots, 4)).toBe(3); // price-4 slot, occupied
   });
 
-  it('skips past an affordable but empty slot to a cheaper occupied one', () => {
-    expect(eligibleTakeSlotIndex(slots, 3)).toBe(1); // price-3 slot is empty; falls back to price-2
-  });
+  it(
+    'returns null — NOT a fallback to a cheaper occupied slot — when the slot a bid points to is empty ' +
+      '(confirmed with the designer: this is exactly "a bid that points to an empty slot")',
+    () => {
+      expect(eligibleTakeSlotIndex(slots, 3)).toBeNull(); // price-3 slot is empty; the occupied price-2 slot is irrelevant
+    },
+  );
 
-  it('returns null when nothing affordable is occupied', () => {
-    expect(eligibleTakeSlotIndex(slots, 1)).toBeNull(); // only the empty price-1 slot is <= bid
+  it("returns null when the bid is lower than the lowest slot's price", () => {
+    expect(eligibleTakeSlotIndex(slots, 0)).toBeNull();
   });
 });
 
@@ -194,9 +225,34 @@ describe('takePrize', () => {
         { price: 6, prizes: [] },
       ],
       prizeDeck: [prize('deck-1', 'green', 3)],
-      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+      // Bids exactly the 'cheap' slot's own price (2), not some higher
+      // amount — under the current rules a bid points to the priciest slot
+      // AT OR BELOW it found by price position alone, so a bid of 4 here
+      // would point to the empty price-4 slot, not fall back to 'cheap'.
+      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [2], amount: 2 } },
     });
   }
+
+  it(
+    "a bid pointing to an empty slot gets nothing, even though a cheaper slot is occupied and would " +
+      'otherwise be affordable — confirmed with the designer: no fallback to the cheaper slot',
+    () => {
+      const state = makeState({
+        phase: 'awaiting-prize-choice',
+        priceSlots: [
+          { price: 3, prizes: [prize('cheap', 'red', 1)] },
+          { price: 5, prizes: [] }, // a bid of 6 points here — empty
+          { price: 8, prizes: [prize('pricey', 'blue', 4)] },
+          { price: 10, prizes: [] },
+          { price: 12, prizes: [] },
+          { price: 14, prizes: [] },
+        ],
+        auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [6], amount: 6 } },
+      });
+      expect(takePrize(state, 'p1', 'cheap').ok).toBe(false); // no fallback to the 3-slot
+      expect(chooseAuctionReward(state, 'p1', 'draw_cards').ok).toBe(true); // the reward is available instead
+    },
+  );
 
   it("rejects a prize priced above the winning bid", () => {
     const result = takePrize(winningState(), 'p1', 'pricey');
@@ -246,7 +302,10 @@ describe('takePrize', () => {
         { price: 6, prizes: [] },
       ],
       prizeDeck: [],
-      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+      // Bids exactly the two-prize slot's own price (2) so it's the slot
+      // the bid points to by position — a higher bid here would instead
+      // point to a higher, empty slot (see the "no fallback" test above).
+      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [2], amount: 2 } },
     });
     const result = takePrize(state, 'p1', 'second');
     expect(result.ok).toBe(true);
@@ -283,8 +342,8 @@ describe('takePrize', () => {
   });
 });
 
-describe('skipPrizeChoice', () => {
-  it('rejects skipping when at least one displayed prize is affordable', () => {
+describe('chooseAuctionReward', () => {
+  it('rejects choosing a reward when at least one displayed prize is affordable', () => {
     const state = makeState({
       phase: 'awaiting-prize-choice',
       priceSlots: [
@@ -295,9 +354,9 @@ describe('skipPrizeChoice', () => {
         { price: 5, prizes: [] },
         { price: 6, prizes: [] },
       ],
-      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [1], amount: 1 } },
     });
-    const result = skipPrizeChoice(state, 'p1');
+    const result = chooseAuctionReward(state, 'p1', 'draw_cards');
     expect(result.ok).toBe(false);
   });
 
@@ -314,14 +373,15 @@ describe('skipPrizeChoice', () => {
       ],
       auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
     });
-    expect(skipPrizeChoice(state, 'p2').ok).toBe(false);
+    expect(chooseAuctionReward(state, 'p2', 'draw_cards').ok).toBe(false);
   });
 
-  it('takes nothing but otherwise proceeds exactly like a normal prize choice when nothing is affordable', () => {
+  it("'draw_cards' draws two cards from the winner's own deck into their hand", () => {
     const state = makeState({
       phase: 'awaiting-prize-choice',
+      players: { p1: { deck: [7, 9], hand: [3] } },
       priceSlots: [
-        { price: 5, prizes: [prize('too-pricey', 'red', 1)] },
+        { price: 5, prizes: [prize('filler', 'red', 1)] },
         { price: 6, prizes: [] },
         { price: 7, prizes: [] },
         { price: 8, prizes: [] },
@@ -331,14 +391,107 @@ describe('skipPrizeChoice', () => {
       prizeDeck: [prize('deck-1', 'green', 3)],
       auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
     });
-    const result = skipPrizeChoice(state, 'p1');
+    const result = chooseAuctionReward(state, 'p1', 'draw_cards');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.state.players.p1.wonPrizes).toEqual([]);
-    // The display still shifted even though nothing was taken.
-    expect(result.state.priceSlots[0].prizes).toEqual([]);
-    expect(result.state.priceSlots[1].prizes).toEqual([prize('too-pricey', 'red', 1)]);
-    expect(result.state.phase).toBe('awaiting-new-prize-placement');
+    // Drawn from the end of the deck, same convention as drawCardForSeat everywhere else.
+    expect(result.state.players.p1.hand).toEqual([3, 9, 7]);
+    expect(result.state.players.p1.deck).toEqual([]);
+    expect(result.state.log.at(-1)).toContain('drew two extra cards');
+  });
+
+  it("'draw_cards' fails soft (draws fewer or zero) once the winner's own deck is already empty", () => {
+    const state = makeState({
+      phase: 'awaiting-prize-choice',
+      players: { p1: { deck: [], hand: [3] } },
+      priceSlots: [
+        { price: 5, prizes: [prize('filler', 'red', 1)] },
+        { price: 6, prizes: [] },
+        { price: 7, prizes: [] },
+        { price: 8, prizes: [] },
+        { price: 9, prizes: [] },
+        { price: 10, prizes: [] },
+      ],
+      prizeDeck: [],
+      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+    });
+    const result = chooseAuctionReward(state, 'p1', 'draw_cards');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.players.p1.hand).toEqual([3]); // unchanged — nothing to draw
+  });
+
+  it(
+    "'extra_shift' moves the display two slots total this round — the reward's own shift, plus the " +
+      'normal one every auction gets regardless (reuses shiftDisplay verbatim)',
+    () => {
+      const state = makeState({
+        phase: 'awaiting-prize-choice',
+        priceSlots: [
+          { price: 5, prizes: [] },
+          { price: 6, prizes: [prize('tracked', 'red', 1)] },
+          { price: 7, prizes: [] },
+          { price: 8, prizes: [] },
+          { price: 9, prizes: [] },
+          { price: 10, prizes: [] },
+        ],
+        prizeDeck: [],
+        auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+      });
+      const result = chooseAuctionReward(state, 'p1', 'extra_shift');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.state.priceSlots[3].prizes).toEqual([prize('tracked', 'red', 1)]); // index 1 -> 2 -> 3
+      expect(result.state.log.at(-1)).toContain('shifted the display an extra space');
+    },
+  );
+
+  it(
+    "'add_prizes' draws two prizes blind from the deck into the lowest slot, landing there AFTER " +
+      '(not swept up by) the normal end-of-round shift',
+    () => {
+      const state = makeState({
+        phase: 'awaiting-prize-choice',
+        priceSlots: [
+          { price: 5, prizes: [prize('existing', 'red', 1)] }, // moves up to index 1 via the normal shift
+          { price: 6, prizes: [] },
+          { price: 7, prizes: [] },
+          { price: 8, prizes: [] },
+          { price: 9, prizes: [] },
+          { price: 10, prizes: [] },
+        ],
+        prizeDeck: [prize('new-1', 'green', 2), prize('new-2', 'purple', 4)],
+        auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+      });
+      const result = chooseAuctionReward(state, 'p1', 'add_prizes');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.state.priceSlots[1].prizes).toEqual([prize('existing', 'red', 1)]); // the normal shift still ran
+      // Drawn from the end of prizeDeck, same convention as elsewhere — 'new-2' comes out first.
+      expect(result.state.priceSlots[0].prizes).toEqual([prize('new-2', 'purple', 4), prize('new-1', 'green', 2)]);
+      expect(result.state.prizeDeck).toEqual([]);
+      expect(result.state.log.at(-1)).toContain('added two prizes to the lowest slot');
+    },
+  );
+
+  it("'add_prizes' fails soft (adds fewer or zero) once the prize deck itself is already empty", () => {
+    const state = makeState({
+      phase: 'awaiting-prize-choice',
+      priceSlots: [
+        { price: 5, prizes: [prize('existing', 'red', 1)] },
+        { price: 6, prizes: [] },
+        { price: 7, prizes: [] },
+        { price: 8, prizes: [] },
+        { price: 9, prizes: [] },
+        { price: 10, prizes: [] },
+      ],
+      prizeDeck: [],
+      auction: { winnerSeat: 'p1', highestBid: { seat: 'p1', cardValues: [4], amount: 4 } },
+    });
+    const result = chooseAuctionReward(state, 'p1', 'add_prizes');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.priceSlots[0].prizes).toEqual([]); // nothing left to add
   });
 });
 

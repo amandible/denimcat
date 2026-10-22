@@ -105,7 +105,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
             <PrizeChoicePanel
               bidAmount={highestBidAmount!}
               hasEligiblePrize={eligibleSlotIndex !== null}
-              onSkip={() => connection.skipPrizeChoice()}
+              onChooseReward={(reward) => connection.chooseAuctionReward(reward)}
             />
           </div>
         )}

@@ -1,4 +1,4 @@
-export { dealGame, computePrices, drawUntilUnique, buildPrizePool } from './setup';
+export { dealGame, computePrices, buildPrizePool } from './setup';
 export {
   bidOptionsForHand,
   getLegalBidOptions,
@@ -8,7 +8,15 @@ export {
   resolveAuctionNoWinner,
   type BidOption,
 } from './bidding';
-export { takePrize, skipPrizeChoice, placeNewPrize, shiftDisplay, eligibleTakeSlotIndex } from './prizes';
+export {
+  takePrize,
+  chooseAuctionReward,
+  placeNewPrize,
+  shiftDisplay,
+  eligibleTakeSlotIndex,
+  slotIndexForBid,
+  type AuctionReward,
+} from './prizes';
 export { drawCardForSeat, drawPostAuctionCards } from './decks';
 export {
   scoreForPrizes,
