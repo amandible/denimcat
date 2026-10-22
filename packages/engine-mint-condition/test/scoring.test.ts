@@ -8,8 +8,8 @@ describe('computeScore', () => {
     expect(computeScore(state, 'p1')).toBe(0);
   });
 
-  it('adds a color bonus equal to the count of the most common color', () => {
-    // 3 red (1+1+1=3 base) + 1 blue (2 base) = 5 base; most common color is red with 3 -> +3
+  it('adds a color bonus that scales as a triangular number of the most common color\'s count (1, 3, 6, 10, ...), not linearly', () => {
+    // 3 red (1+1+1=3 base) + 1 blue (2 base) = 5 base; most common color is red with 3 -> triangular(3) = 6
     const state = makeState({
       players: {
         p1: {
@@ -17,15 +17,24 @@ describe('computeScore', () => {
         },
       },
     });
-    expect(computeScore(state, 'p1')).toBe(5 + 3);
+    expect(computeScore(state, 'p1')).toBe(5 + 6);
   });
 
   it('gives the same bonus regardless of which color is tied for most common', () => {
     const state = makeState({
       players: { p1: { wonPrizes: [prize('r1', 'red', 2), prize('b1', 'blue', 2)] } },
     });
-    // base 4, tie for most common at count 1 each -> bonus 1, no branching needed
+    // base 4, tie for most common at count 1 each -> triangular(1) = 1, no branching needed
     expect(computeScore(state, 'p1')).toBe(4 + 1);
+  });
+
+  it('scores every step of the triangular progression correctly: 1, 3, 6, 10 for counts 1-4', () => {
+    const expected = [1, 3, 6, 10];
+    for (let count = 1; count <= 4; count++) {
+      const wonPrizes = Array.from({ length: count }, (_, i) => prize(`r${i}`, 'red', 0));
+      const state = makeState({ players: { p1: { wonPrizes } } });
+      expect(computeScore(state, 'p1')).toBe(expected[count - 1]);
+    }
   });
 });
 

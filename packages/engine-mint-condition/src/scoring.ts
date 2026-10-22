@@ -8,6 +8,16 @@ export interface ScoreBreakdown {
 }
 
 /**
+ * The color bonus scales as a triangular number of the most-common-color
+ * count (1, 3, 6, 10, ... for 1, 2, 3, 4, ... cards) rather than linearly
+ * (1, 2, 3, 4, ...) — a steeper reward for committing to one color, per the
+ * designer's latest revision.
+ */
+function triangularNumber(n: number): number {
+  return (n * (n + 1)) / 2;
+}
+
+/**
  * Decoupled from `GameState` (like `bidOptionsForHand`) so the client can
  * compute a seat's score directly from its view's public `wonPrizes` list,
  * without needing the full internal state it never has.
@@ -17,7 +27,8 @@ export function scoreForPrizes(prizes: PrizeCard[]): ScoreBreakdown {
   if (prizes.length === 0) return { base, colorBonus: 0, total: base };
   const counts = new Map<string, number>();
   for (const p of prizes) counts.set(p.color, (counts.get(p.color) ?? 0) + 1);
-  const colorBonus = Math.max(...counts.values());
+  const mostCommonCount = Math.max(...counts.values());
+  const colorBonus = triangularNumber(mostCommonCount);
   return { base, colorBonus, total: base + colorBonus };
 }
 

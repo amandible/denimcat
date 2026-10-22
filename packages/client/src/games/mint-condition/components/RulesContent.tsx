@@ -72,7 +72,10 @@ export function RulesContent() {
       </ul>
 
       <h4>Scoring</h4>
-      <p>At the end of the game, a player gets one additional point for each card in their most common color.</p>
+      <p>
+        At the end of the game, a player gets a bonus for their most common color: 1 point for 1 card, 3 for
+        2, 6 for 3, 10 for 4, and so on (each step adds one more than the last).
+      </p>
     </>
   );
 }
