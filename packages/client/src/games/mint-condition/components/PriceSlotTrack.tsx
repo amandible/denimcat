@@ -5,6 +5,7 @@ export function PriceSlotTrack({
   slots,
   onPrizeClick,
   eligibleSlotIndex,
+  hoveredSlotIndex,
   placeableSlots,
   onPlaceInSlot,
 }: {
@@ -12,6 +13,15 @@ export function PriceSlotTrack({
   onPrizeClick?: (prizeId: string) => void;
   /** When set (take-prize mode), this is the one slot the winner must take from this round — see eligibleTakeSlotIndex. Only its prizes are clickable, and it's the only slot highlighted. */
   eligibleSlotIndex?: number;
+  /**
+   * The slot a currently-hovered bid option (in BidOptionsList) would point
+   * to — a lightweight preview during bidding itself, separate from
+   * eligibleSlotIndex (the actual post-win prize-choice slot; the two
+   * never apply at the same time, since bidding and prize-choice are
+   * different game phases). If that slot is empty, also shows a reminder
+   * of the three consolation rewards a bid landing there would trigger.
+   */
+  hoveredSlotIndex?: number;
   /**
    * When set, the track enters "placing a new prize" mode: slots at these
    * indices become clickable (via onPlaceInSlot) regardless of whether they
@@ -30,6 +40,7 @@ export function PriceSlotTrack({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'fit-content' }}>
       {bySlotIndexDescending.map(({ slot, i }) => {
         const isEligible = eligibleSlotIndex === i;
+        const isHovered = hoveredSlotIndex === i;
         const isPlaceable = !!placeableSlots?.has(i);
         const isLockedForPlacement = !!placeableSlots && !isPlaceable;
         return (
@@ -42,7 +53,7 @@ export function PriceSlotTrack({
               display: 'flex',
               alignItems: 'center',
               gap: 12,
-              border: isEligible || isPlaceable ? '2px solid var(--accent)' : undefined,
+              border: isEligible || isPlaceable || isHovered ? '2px solid var(--accent)' : undefined,
               cursor: isPlaceable ? 'pointer' : undefined,
               opacity: isLockedForPlacement ? 0.5 : 1,
             }}
@@ -54,6 +65,11 @@ export function PriceSlotTrack({
               ))}
               {isPlaceable && <span style={{ color: 'var(--accent)', fontSize: 13 }}>Place here</span>}
               {isLockedForPlacement && <span style={{ color: 'var(--muted)', fontSize: 13 }}>🔒 locked</span>}
+              {isHovered && slot.prizes.length === 0 && (
+                <span style={{ color: 'var(--accent)', fontSize: 12 }}>
+                  Reward if you bid here: +1 money card, +1 extra space, or +1 prize
+                </span>
+              )}
             </div>
           </div>
         );

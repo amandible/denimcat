@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { eligibleTakeSlotIndex, type SeatId } from '@denimcat/engine-mint-condition';
+import { eligibleTakeSlotIndex, slotIndexForBid, type SeatId } from '@denimcat/engine-mint-condition';
 import type { MintConditionConnection } from './useMintConditionActions';
 import { PriceSlotTrack } from './components/PriceSlotTrack';
 import { AuctionStatusPanel } from './components/AuctionStatusPanel';
@@ -18,6 +18,7 @@ import { seatLabel } from './seats';
 export function GameView({ roomCode, connection }: { roomCode: string; connection: MintConditionConnection }) {
   const { gameState, you } = connection;
   const [showRules, setShowRules] = useState(false);
+  const [hoveredBidAmount, setHoveredBidAmount] = useState<number | null>(null);
   if (!gameState || !you) return null;
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
@@ -43,6 +44,15 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   const showingPrizeChoice = !!mySeat && isWinner && gameState.phase === 'awaiting-prize-choice' && highestBidAmount !== undefined;
   const eligibleSlotIndex = showingPrizeChoice ? eligibleTakeSlotIndex(gameState.priceSlots, highestBidAmount!) : null;
 
+  // A hover preview during bidding itself — reuses the same slotIndexForBid
+  // lookup the engine actually bids against, so what you see hovering a
+  // bid option is exactly where that bid would land. Gated on isMyTurn so
+  // a stale hover value (BidOptionsList unmounting without a mouseleave,
+  // e.g. the turn changing mid-hover) can never highlight a slot outside
+  // the one phase this preview applies to.
+  const hoveredSlotIndex =
+    isMyTurn && hoveredBidAmount !== null ? (slotIndexForBid(gameState.priceSlots, hoveredBidAmount) ?? undefined) : undefined;
+
   const showingPlacement = !!mySeat && isWinner && gameState.phase === 'awaiting-new-prize-placement' && !!gameState.revealedPrize;
   const lastSlotIndex = gameState.priceSlots.length - 1;
   const upperSlotIndices = new Set([lastSlotIndex - 1, lastSlotIndex]);
@@ -64,6 +74,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         <PriceSlotTrack
           slots={gameState.priceSlots}
           eligibleSlotIndex={eligibleSlotIndex ?? undefined}
+          hoveredSlotIndex={hoveredSlotIndex}
           onPrizeClick={showingPrizeChoice ? (prizeId) => connection.takePrize(prizeId) : undefined}
           placeableSlots={placeableSlots}
           onPlaceInSlot={showingPlacement ? (slotIndex) => connection.placeNewPrize(slotIndex) : undefined}
@@ -93,6 +104,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
               hand={myHand}
               currentBidAmount={gameState.auction.highestBid?.amount ?? 0}
               onBid={(cards) => connection.placeBid(cards)}
+              onHoverAmount={setHoveredBidAmount}
             />
             <div style={{ marginTop: 8 }}>
               <PassButton onPass={() => connection.pass()} />
