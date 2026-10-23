@@ -172,16 +172,16 @@ export type AuctionReward = 'draw_cards' | 'extra_shift' | 'add_prizes';
  * slot is occupied. Replaces the old plain "pay your bid, take nothing"
  * skip entirely — confirmed with the designer. They still pay their bid
  * (already discarded when the auction resolved) and choose exactly one of:
- * - 'draw_cards': draw two money cards.
+ * - 'draw_cards': draw one extra money card.
  * - 'extra_shift': shift the display one extra space (on top of the
  *   normal end-of-round shift every auction gets regardless) — reuses
  *   shiftDisplay verbatim, discard-and-replace and upper-slot-unlock side
  *   effects included.
- * - 'add_prizes': two prizes drawn blind from the prize deck (no reveal,
- *   no choice) land in the lowest slot, right after the normal
+ * - 'add_prizes': one prize drawn blind from the prize deck (no reveal,
+ *   no choice) lands in the lowest slot, right after the normal
  *   end-of-round shift empties it — see afterPrizeChoice's `afterShift`.
- * Each fails soft (fewer or zero cards/prizes) if its own deck runs dry,
- * same convention as every other deck-exhaustion point in this engine.
+ * Each fails soft (no card/prize) if its own deck is already dry, same
+ * convention as every other deck-exhaustion point in this engine.
  */
 export function chooseAuctionReward(state: GameState, seat: SeatId, reward: AuctionReward): EngineResult {
   if (state.phase !== 'awaiting-prize-choice') {
@@ -197,9 +197,8 @@ export function chooseAuctionReward(state: GameState, seat: SeatId, reward: Auct
   }
 
   if (reward === 'draw_cards') {
-    let next = drawCardForSeat(state, seat);
-    next = drawCardForSeat(next, seat);
-    pushLog(next, `${seat} took no prize this round — drew two extra cards instead.`);
+    const next = drawCardForSeat(state, seat);
+    pushLog(next, `${seat} took no prize this round — drew an extra card instead.`);
     return ok(afterPrizeChoice(next));
   }
 
@@ -210,12 +209,12 @@ export function chooseAuctionReward(state: GameState, seat: SeatId, reward: Auct
   }
 
   const next = cloneState(state);
-  pushLog(next, `${seat} took no prize this round — added two prizes to the lowest slot instead.`);
+  pushLog(next, `${seat} took no prize this round — added a prize to the lowest slot instead.`);
   return ok(
     afterPrizeChoice(next, (s) => {
-      const drawn: PrizeCard[] = [];
-      for (let i = 0; i < 2 && s.prizeDeck.length > 0; i++) drawn.push(s.prizeDeck.pop()!);
-      if (drawn.length > 0) s.priceSlots[0].prizes = [...s.priceSlots[0].prizes, ...drawn];
+      if (s.prizeDeck.length === 0) return s;
+      const drawn = s.prizeDeck.pop()!;
+      s.priceSlots[0].prizes = [...s.priceSlots[0].prizes, drawn];
       return s;
     }),
   );

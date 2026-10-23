@@ -1,9 +1,9 @@
 import type { AuctionReward } from '@denimcat/engine-mint-condition';
 
 const REWARD_LABELS: Record<AuctionReward, string> = {
-  draw_cards: 'Draw two money cards',
+  draw_cards: 'Draw an extra money card',
   extra_shift: 'Move all prizes up one extra space',
-  add_prizes: 'Add two prizes to the lowest slot',
+  add_prizes: 'Add an extra prize to the lowest slot',
 };
 
 /**

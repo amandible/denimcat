@@ -376,7 +376,7 @@ describe('chooseAuctionReward', () => {
     expect(chooseAuctionReward(state, 'p2', 'draw_cards').ok).toBe(false);
   });
 
-  it("'draw_cards' draws two cards from the winner's own deck into their hand", () => {
+  it("'draw_cards' draws one extra card from the winner's own deck into their hand", () => {
     const state = makeState({
       phase: 'awaiting-prize-choice',
       players: { p1: { deck: [7, 9], hand: [3] } },
@@ -395,9 +395,9 @@ describe('chooseAuctionReward', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     // Drawn from the end of the deck, same convention as drawCardForSeat everywhere else.
-    expect(result.state.players.p1.hand).toEqual([3, 9, 7]);
-    expect(result.state.players.p1.deck).toEqual([]);
-    expect(result.state.log.at(-1)).toContain('drew two extra cards');
+    expect(result.state.players.p1.hand).toEqual([3, 9]);
+    expect(result.state.players.p1.deck).toEqual([7]);
+    expect(result.state.log.at(-1)).toContain('drew an extra card');
   });
 
   it("'draw_cards' fails soft (draws fewer or zero) once the winner's own deck is already empty", () => {
@@ -447,7 +447,7 @@ describe('chooseAuctionReward', () => {
   );
 
   it(
-    "'add_prizes' draws two prizes blind from the deck into the lowest slot, landing there AFTER " +
+    "'add_prizes' draws one prize blind from the deck into the lowest slot, landing there AFTER " +
       '(not swept up by) the normal end-of-round shift',
     () => {
       const state = makeState({
@@ -468,9 +468,12 @@ describe('chooseAuctionReward', () => {
       if (!result.ok) return;
       expect(result.state.priceSlots[1].prizes).toEqual([prize('existing', 'red', 1)]); // the normal shift still ran
       // Drawn from the end of prizeDeck, same convention as elsewhere — 'new-2' comes out first.
-      expect(result.state.priceSlots[0].prizes).toEqual([prize('new-2', 'purple', 4), prize('new-1', 'green', 2)]);
+      expect(result.state.priceSlots[0].prizes).toEqual([prize('new-2', 'purple', 4)]);
+      // The one remaining prize ('new-1') isn't left sitting in the deck —
+      // it's the normal end-of-round reveal every round still gets.
+      expect(result.state.revealedPrize).toEqual(prize('new-1', 'green', 2));
       expect(result.state.prizeDeck).toEqual([]);
-      expect(result.state.log.at(-1)).toContain('added two prizes to the lowest slot');
+      expect(result.state.log.at(-1)).toContain('added a prize to the lowest slot');
     },
   );
 
