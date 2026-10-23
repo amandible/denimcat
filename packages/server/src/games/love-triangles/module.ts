@@ -49,5 +49,6 @@ export const loveTrianglesModule: GameModule<GameState, LoveTrianglesConfig, Sea
   },
 
   getActiveSeat: (state) => (state.phase === 'playing' ? state.activeSeat : null),
+  isRoomFinished: (state) => state.phase === 'ended',
   roomUrlPath: (code) => `/love-triangles/room/${code}`,
 };

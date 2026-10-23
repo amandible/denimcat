@@ -1,6 +1,6 @@
 export * from './gameModule';
 export { type EmailSender, createDefaultEmailSender, createNoopEmailSender, createResendEmailSender } from './email';
-export { RoomStore, type RoomStoreOptions } from './rooms/roomStore';
+export { RoomStore, type RoomStoreOptions, type OpenGameSummary } from './rooms/roomStore';
 export {
   type PersistedRoom,
   type PersistedSeat,

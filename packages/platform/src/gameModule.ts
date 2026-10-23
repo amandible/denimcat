@@ -41,6 +41,16 @@ export interface GameModule<TState, TConfig, TSeat extends string> {
    * RoomStore.applyAction, which diffs this before/after each mutation).
    */
   getActiveSeat?(state: TState): TSeat | null;
+  /**
+   * Has this room's game already concluded? Used by RoomStore.listOpenRoomsForAccount
+   * (the landing page's "your games" list) to drop finished games. Deliberately
+   * not named `isGameOver` — several engines (e.g. Mint Condition, Love
+   * Triangles) already export their own `isGameOver` from `scoring.ts`, which
+   * checks the pre-transition trigger condition for ending the game, not
+   * whether it has already ended — a different question from this one.
+   * Optional — a game that omits this is just never excluded from the list.
+   */
+  isRoomFinished?(state: TState): boolean;
   /** Builds this game's own room URL path (e.g. `/tashkalar/room/ABCD`) for a turn-notification email's reconnect link. Omit to send notifications without a clickable link. */
   roomUrlPath?(code: string): string;
 }

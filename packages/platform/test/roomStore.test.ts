@@ -474,3 +474,91 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
     store.stop();
   });
 });
+
+describe('RoomStore.listOpenRoomsForAccount', () => {
+  type ListState = { turn: TurnSeat | null; finished: boolean };
+
+  function makeListModule(): GameModule<ListState, undefined, TurnSeat> {
+    return {
+      id: 'list-game',
+      displayName: 'List Game',
+      namespace: '/list',
+      minSeats: 2,
+      maxSeats: 2,
+      parseConfig: () => undefined,
+      seatsForConfig: () => ['p1', 'p2'],
+      createInitialState: () => ({ turn: 'p1', finished: false }),
+      registerHandlers: () => {},
+      getActiveSeat: (state) => (state.finished ? null : state.turn),
+      isRoomFinished: (state) => state.finished,
+    };
+  }
+
+  it('computes isMyTurn correctly for a normal room — true only when the active seat is mine', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'bob@example.com');
+
+    const aliceGames = await store.listOpenRoomsForAccount('alice@example.com');
+    expect(aliceGames).toHaveLength(1);
+    expect(aliceGames[0]).toMatchObject({ code: created.roomCode, gameId: 'list-game', mySeats: ['p1'], seatCount: 2, isMyTurn: true });
+
+    const bobGames = await store.listOpenRoomsForAccount('bob@example.com');
+    expect(bobGames[0].isMyTurn).toBe(false);
+
+    store.stop();
+  });
+
+  it('treats a hotseat-shaped room (account holds every seat) as always my turn, with no special-casing needed', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'alice@example.com');
+
+    const games = await store.listOpenRoomsForAccount('alice@example.com');
+    expect(games).toHaveLength(1);
+    expect(games[0].mySeats).toEqual(['p1', 'p2']);
+    expect(games[0].isMyTurn).toBe(true); // active seat (p1) is always one of mySeats here
+
+    store.stop();
+  });
+
+  it('excludes a room once GameModule.isRoomFinished is true for it', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    expect(await store.listOpenRoomsForAccount('alice@example.com')).toHaveLength(1);
+
+    const persisted = await repo.get(created.roomCode);
+    if (!persisted) throw new Error('room not persisted');
+    await repo.save({ ...persisted, gameState: { ...persisted.gameState, finished: true } });
+
+    expect(await store.listOpenRoomsForAccount('alice@example.com')).toEqual([]);
+    store.stop();
+  });
+
+  it('returns an empty list for an account that holds no seats anywhere', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+
+    expect(await store.listOpenRoomsForAccount('carol@example.com')).toEqual([]);
+    store.stop();
+  });
+});

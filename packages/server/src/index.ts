@@ -25,6 +25,7 @@ import {
   type RoomStoreOptions,
 } from '@denimcat/platform';
 import { createApp } from './app';
+import type { GameStoreEntry } from './myGamesRoutes';
 import { hyperBloomModule } from '../../../private-games/other-games/server-hyperbloom/module';
 import { mintConditionModule } from './games/mint-condition/module';
 import { loveTrianglesModule } from './games/love-triangles/module';
@@ -52,7 +53,15 @@ async function main() {
   const authRepository = createDefaultAuthRepository();
   const authService = createAuthService(authRepository, emailSender, appBaseUrl, process.env.OWNER_EMAIL);
 
-  const app = createApp({ authService, clientOrigins });
+  // Populated below, after each game's RoomStore is constructed (which
+  // itself needs `io`, which needs `httpServer`, which needs `app` — so
+  // this can't be filled in before createApp runs). Safe to hand the array
+  // reference to createApp now and push into it later: no HTTP request can
+  // land before httpServer.listen() below, by which point every game has
+  // been pushed.
+  const gameStores: GameStoreEntry[] = [];
+
+  const app = createApp({ authService, clientOrigins, gameStores });
   const httpServer = createServer(app);
   // Untyped at the top level deliberately: this one Server hosts multiple
   // games, each with its own event contract on its own namespace (typed
@@ -104,6 +113,7 @@ async function main() {
   const hyperBloomNsp = io.of(hyperBloomModule.namespace);
   const hyperBloomStore = new RoomStore(hyperBloomModule, hyperBloomRepository, hyperBloomNsp, roomStoreOptions);
   attachSocketHandlers(hyperBloomNsp, hyperBloomStore, hyperBloomModule);
+  gameStores.push({ module: hyperBloomModule, store: hyperBloomStore });
 
   const mintConditionRepository = createDefaultRoomRepository<MintConditionState, MintConditionSeatId>();
   const mintConditionNsp = io.of(mintConditionModule.namespace);
@@ -114,6 +124,7 @@ async function main() {
     roomStoreOptions,
   );
   attachSocketHandlers(mintConditionNsp, mintConditionStore, mintConditionModule);
+  gameStores.push({ module: mintConditionModule, store: mintConditionStore });
 
   const loveTrianglesRepository = createDefaultRoomRepository<LoveTrianglesState, LoveTrianglesSeatId>();
   const loveTrianglesNsp = io.of(loveTrianglesModule.namespace);
@@ -124,6 +135,7 @@ async function main() {
     roomStoreOptions,
   );
   attachSocketHandlers(loveTrianglesNsp, loveTrianglesStore, loveTrianglesModule);
+  gameStores.push({ module: loveTrianglesModule, store: loveTrianglesStore });
 
   const tashKalarRepository = createDefaultRoomRepository<TashKalarState, TashKalarSeatId>();
   const tashKalarNsp = io.of(tashKalarModule.namespace);
@@ -134,6 +146,7 @@ async function main() {
     roomStoreOptions,
   );
   attachSocketHandlers(tashKalarNsp, tashKalarStore, tashKalarModule);
+  gameStores.push({ module: tashKalarModule, store: tashKalarStore });
 
   const kingsGateRepository = createDefaultRoomRepository<KingsGateState, KingsGateSeatId>();
   const kingsGateNsp = io.of(kingsGateModule.namespace);
@@ -144,6 +157,7 @@ async function main() {
     roomStoreOptions,
   );
   attachSocketHandlers(kingsGateNsp, kingsGateStore, kingsGateModule);
+  gameStores.push({ module: kingsGateModule, store: kingsGateStore });
 
   const port = Number(process.env.PORT ?? 4000);
   httpServer.listen(port, () => {

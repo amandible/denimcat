@@ -63,6 +63,18 @@ export interface RoomStoreOptions {
   appBaseUrl?: string;
 }
 
+/** One open room an account holds a seat in — see RoomStore.listOpenRoomsForAccount. */
+export interface OpenGameSummary<TSeat extends string> {
+  gameId: string;
+  code: string;
+  /** Every seat this account holds — more than one only for a hotseat room, where every seat was joined from the same authenticated browser. */
+  mySeats: TSeat[];
+  /** room.seatOrder.length — lets the caller detect "I hold every seat" (hotseat) without re-deriving it. */
+  seatCount: number;
+  isMyTurn: boolean;
+  lastActivityAt: number;
+}
+
 /**
  * Owns all live room state for one game: an in-memory cache for fast
  * per-move access, write-through/read-through to a RoomRepository (Neon in
@@ -524,6 +536,34 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   async getRoomInfo(code: string): Promise<RoomInfo<TSeat> | null> {
     const room = await this.getRoom(code);
     return room ? this.buildRoomInfo(room) : null;
+  }
+
+  /**
+   * Every one of this game's currently-open (not GameModule.isRoomFinished)
+   * rooms where `email` holds a seat — feeds the landing page's "your
+   * games" list (see GET /my-games). `mySeats` is every seat this account
+   * holds, which for a hotseat room (every seat joined from the same
+   * authenticated browser) is the full seat list — that's what lets
+   * `isMyTurn` read as "always true" for hotseat with no special-casing:
+   * whenever any seat is active, it's necessarily one of `mySeats`.
+   */
+  async listOpenRoomsForAccount(email: string): Promise<OpenGameSummary<TSeat>[]> {
+    const rooms = await this.repository.findByAccountEmail(this.module.id, email);
+    const out: OpenGameSummary<TSeat>[] = [];
+    for (const room of rooms) {
+      if (this.module.isRoomFinished?.(room.gameState)) continue;
+      const mySeats = room.seatOrder.filter((seat) => room.knownAccounts?.[seat] === email);
+      const activeSeat = this.module.getActiveSeat?.(room.gameState) ?? null;
+      out.push({
+        gameId: this.module.id,
+        code: room.code,
+        mySeats,
+        seatCount: room.seatOrder.length,
+        isMyTurn: activeSeat !== null && mySeats.includes(activeSeat),
+        lastActivityAt: room.lastActivityAt,
+      });
+    }
+    return out;
   }
 
   private async persist(room: LiveRoom<TState, TSeat>): Promise<void> {

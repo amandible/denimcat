@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePersistedRoomData, type PersistedRoom } from '../src/rooms/roomRepository';
+import { InMemoryRoomRepository, parsePersistedRoomData, type PersistedRoom } from '../src/rooms/roomRepository';
 
 type TestSeat = 'red' | 'blue';
 
@@ -22,5 +22,40 @@ describe('parsePersistedRoomData', () => {
   it('passes through an already-parsed object unchanged', () => {
     const result = parsePersistedRoomData(sample);
     expect(result).toBe(sample);
+  });
+});
+
+describe('InMemoryRoomRepository.findByAccountEmail', () => {
+  function room(overrides: Partial<PersistedRoom<{ dummy: true }, TestSeat>>): PersistedRoom<{ dummy: true }, TestSeat> {
+    return { ...sample, ...overrides };
+  }
+
+  it('finds a room where the email holds any seat', async () => {
+    const repo = new InMemoryRoomRepository<{ dummy: true }, TestSeat>();
+    await repo.save(room({ code: 'AAAA', knownAccounts: { blue: 'alice@example.com' } }));
+
+    const found = await repo.findByAccountEmail('test-game', 'alice@example.com');
+    expect(found.map((r) => r.code)).toEqual(['AAAA']);
+  });
+
+  it('excludes rooms for a different gameId, even if the email matches', async () => {
+    const repo = new InMemoryRoomRepository<{ dummy: true }, TestSeat>();
+    await repo.save(room({ code: 'AAAA', gameId: 'other-game', knownAccounts: { blue: 'alice@example.com' } }));
+
+    expect(await repo.findByAccountEmail('test-game', 'alice@example.com')).toEqual([]);
+  });
+
+  it('excludes rooms where the email never held a seat', async () => {
+    const repo = new InMemoryRoomRepository<{ dummy: true }, TestSeat>();
+    await repo.save(room({ code: 'AAAA', knownAccounts: { blue: 'bob@example.com' } }));
+
+    expect(await repo.findByAccountEmail('test-game', 'alice@example.com')).toEqual([]);
+  });
+
+  it('is unmatched for a room with no knownAccounts at all (pre-accounts room)', async () => {
+    const repo = new InMemoryRoomRepository<{ dummy: true }, TestSeat>();
+    await repo.save(room({ code: 'AAAA', knownAccounts: undefined }));
+
+    expect(await repo.findByAccountEmail('test-game', 'alice@example.com')).toEqual([]);
   });
 });

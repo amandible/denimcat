@@ -56,6 +56,8 @@ export interface RoomRepository<TState, TSeat extends string> {
   get(code: string): Promise<PersistedRoom<TState, TSeat> | null>;
   save(room: PersistedRoom<TState, TSeat>): Promise<void>;
   delete(code: string): Promise<void>;
+  /** Every room of this game where `email` holds (or has ever held) a seat — see RoomStore.listOpenRoomsForAccount, the landing page's "your games" list. */
+  findByAccountEmail(gameId: string, email: string): Promise<PersistedRoom<TState, TSeat>[]>;
 }
 
 /** Used for tests and as the sole store when no DATABASE_URL is configured. */
@@ -72,6 +74,12 @@ export class InMemoryRoomRepository<TState, TSeat extends string> implements Roo
 
   async delete(code: string): Promise<void> {
     this.rooms.delete(code);
+  }
+
+  async findByAccountEmail(gameId: string, email: string): Promise<PersistedRoom<TState, TSeat>[]> {
+    return [...this.rooms.values()].filter(
+      (room) => room.gameId === gameId && Object.values(room.knownAccounts ?? {}).includes(email),
+    );
   }
 }
 
@@ -135,6 +143,34 @@ export class PostgresRoomRepository<TState, TSeat extends string> implements Roo
       await db`DELETE FROM rooms WHERE code = ${code}`;
     } catch (error) {
       console.error(`[db] failed to delete room ${code}:`, error);
+    }
+  }
+
+  async findByAccountEmail(gameId: string, email: string): Promise<PersistedRoom<TState, TSeat>[]> {
+    const db = getDb();
+    if (!db) return [];
+    try {
+      // `data` comes back from a real Neon connection as a jsonb SCALAR
+      // STRING holding the JSON text, not a jsonb object — see
+      // parsePersistedRoomData's doc comment for the same quirk on the
+      // read side. `->>`/`jsonb_each_text` only work on a true jsonb
+      // object, so unwrap that outer string layer first via a LATERAL
+      // before applying any path lookup.
+      const rows = await db<{ data: PersistedRoom<TState, TSeat> | string }[]>`
+        SELECT r.data FROM rooms r,
+        LATERAL (
+          SELECT CASE WHEN jsonb_typeof(r.data) = 'string' THEN (r.data #>> '{}')::jsonb ELSE r.data END AS doc
+        ) d
+        WHERE d.doc->>'gameId' = ${gameId}
+          AND EXISTS (
+            SELECT 1 FROM jsonb_each_text(COALESCE(d.doc->'knownAccounts', '{}'::jsonb)) AS kv(seat, val)
+            WHERE kv.val = ${email}
+          )
+      `;
+      return rows.map((row) => parsePersistedRoomData(row.data));
+    } catch (error) {
+      console.error(`[db] failed to find rooms for account ${email}:`, error);
+      return [];
     }
   }
 }

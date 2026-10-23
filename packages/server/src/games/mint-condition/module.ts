@@ -48,5 +48,6 @@ export const mintConditionModule: GameModule<GameState, MintConditionConfig, Sea
     if (state.phase === 'awaiting-prize-choice' || state.phase === 'awaiting-new-prize-placement') return state.auction.winnerSeat;
     return null; // 'ended'
   },
+  isRoomFinished: (state) => state.phase === 'ended',
   roomUrlPath: (code) => `/mint-condition/room/${code}`,
 };
