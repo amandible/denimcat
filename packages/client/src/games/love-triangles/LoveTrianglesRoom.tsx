@@ -2,6 +2,7 @@ import type { GameState, PlayerCount } from '@denimcat/engine-love-triangles';
 import { HotseatRoom } from '../../views/HotseatRoom';
 import { LobbyView } from '../../views/LobbyView';
 import { useDocumentTitle } from '../../state/useDocumentTitle';
+import { useTurnChime } from '../../state/useTurnChime';
 import { useLoveTrianglesActions } from './useLoveTrianglesActions';
 import { GameView } from './GameView';
 import { CANDIDATE_SEATS, seatLabel } from './seats';
@@ -44,6 +45,7 @@ export function LoveTrianglesRoom({ roomCode }: { roomCode: string }) {
 function NormalLoveTrianglesRoom({ roomCode }: { roomCode: string }) {
   const connection = useLoveTrianglesActions(roomCode);
   useDocumentTitle('Love Triangles', connection, getTurnSeat);
+  useTurnChime(connection, getTurnSeat);
 
   if (connection.status === 'connecting') {
     return <Centered>Connecting…</Centered>;

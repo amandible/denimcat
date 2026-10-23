@@ -2,6 +2,7 @@ import type { MintConditionStateView, PlayerCount } from '@denimcat/engine-mint-
 import { HotseatRoom } from '../../views/HotseatRoom';
 import { LobbyView } from '../../views/LobbyView';
 import { useDocumentTitle } from '../../state/useDocumentTitle';
+import { useTurnChime } from '../../state/useTurnChime';
 import { useMintConditionActions } from './useMintConditionActions';
 import { GameView } from './GameView';
 import { CANDIDATE_SEATS, seatLabel } from './seats';
@@ -48,6 +49,7 @@ export function MintConditionRoom({ roomCode }: { roomCode: string }) {
 function NormalMintConditionRoom({ roomCode }: { roomCode: string }) {
   const connection = useMintConditionActions(roomCode);
   useDocumentTitle('Mint Condition', connection, getTurnSeat);
+  useTurnChime(connection, getTurnSeat);
 
   if (connection.status === 'connecting') {
     return <Centered>Connecting…</Centered>;
