@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@denimcat/shared": "*",
     "@denimcat/engine-hyperbloom": "*",
     "@denimcat/engine-mint-condition": "*",
     "@denimcat/engine-love-triangles": "*",

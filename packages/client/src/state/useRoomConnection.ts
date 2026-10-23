@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import type { ChatMessage } from '@denimcat/shared';
 import { clearSeat, clearSeatForRole, loadSeat, loadSeatForRole, saveSeat, saveSeatForRole } from './seatToken';
 import { invalidateSession, loadSessionToken } from './authToken';
 import { SERVER_URL } from '../socket';
@@ -33,6 +34,7 @@ export interface RoomInfo {
   /** `name` is whatever the occupying player optionally supplied at join time — absent if they left it blank. */
   seats: Record<string, { connected: boolean; name?: string } | undefined>;
   spectatorCount: number;
+  chatMessages: ChatMessage[];
 }
 
 export interface RoomConnection<TView> {

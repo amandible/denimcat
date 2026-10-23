@@ -6,6 +6,7 @@ const INVALID_PAYLOAD = { code: 'INVALID_PAYLOAD', message: 'Malformed request.'
 const INTERNAL_ERROR = { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' };
 /** A display label, not an identity — generous, but still bounded so one player can't wreck the seat-list UI for everyone else in the room. */
 const MAX_NAME_LENGTH = 40;
+const MAX_CHAT_LENGTH = 500;
 
 /** Set by index.ts's socket.io auth middleware from the already-verified session — never trust a client-supplied value for identity, only this. */
 function accountEmailOf(socket: Socket): string | undefined {
@@ -176,4 +177,28 @@ export function registerRoomHandlers<TState, TConfig, TSeat extends string>(
       });
   });
 
+  socket.on(
+    'send_chat',
+    (payload: { roomCode?: unknown; text?: unknown; afterLogIndex?: unknown }, cb: (res: unknown) => void) => {
+      if (
+        !payload ||
+        !isNonEmptyString(payload.roomCode) ||
+        !isNonEmptyString(payload.text) ||
+        payload.text.length > MAX_CHAT_LENGTH ||
+        typeof payload.afterLogIndex !== 'number' ||
+        !Number.isInteger(payload.afterLogIndex) ||
+        payload.afterLogIndex < 0
+      ) {
+        cb({ ok: false, error: INVALID_PAYLOAD });
+        return;
+      }
+      store
+        .sendChatMessage(payload.roomCode, socket.id, payload.text, payload.afterLogIndex, accountDisplayNameOf(socket))
+        .then(cb)
+        .catch((error) => {
+          console.error('[socket] send_chat failed:', error);
+          cb({ ok: false, error: INTERNAL_ERROR });
+        });
+    },
+  );
 }

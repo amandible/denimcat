@@ -2,6 +2,27 @@ import type { EngineError } from './result';
 
 export type Role<TSeat extends string> = TSeat | 'spectator';
 
+/**
+ * One chat message, meant to be interleaved into a game's own
+ * `gameState.log` rather than shown in a separate list — `afterLogIndex`
+ * says where: "the log had this many entries when this was sent," so it
+ * renders right after `log[afterLogIndex - 1]`. Computed client-side at
+ * send time from the sender's own `gameState.log.length` (never
+ * server-computed — RoomStore is generic over an opaque game state and
+ * must never be asked to inspect any particular game's `log` shape).
+ */
+export interface ChatMessage {
+  id: string;
+  /** Whichever role sent it — a seat id, or 'spectator'. */
+  seat: string;
+  /** The sender's account display name, when set (see Settings) — falls back to a seat label client-side when absent. */
+  name?: string;
+  text: string;
+  /** Wall-clock, display-only (e.g. a hover timestamp) — never used for log ordering. */
+  at: number;
+  afterLogIndex: number;
+}
+
 export interface RoomInfo<TSeat extends string> {
   code: string;
   /** The room's fixed seat list, sized by whatever config it was created with — always present, even for empty seats. */
@@ -9,6 +30,7 @@ export interface RoomInfo<TSeat extends string> {
   /** `name` is whatever the occupying player optionally supplied at join time — absent if they left it blank. */
   seats: Partial<Record<TSeat, { connected: boolean; name?: string }>>;
   spectatorCount: number;
+  chatMessages: ChatMessage[];
 }
 
 export type JoinResult<TSeat extends string, TView> =
@@ -62,6 +84,8 @@ export interface RoomLifecycleClientToServerEvents<TSeat extends string, TConfig
    */
   reconnect_by_account: (payload: { roomCode: string }, cb: (res: JoinResult<TSeat, TView>) => void) => void;
   leave_seat: (payload: { roomCode: string }, cb: (res: { ok: true }) => void) => void;
+  /** `afterLogIndex` is the sender's own `gameState.log.length` at send time — see ChatMessage's doc comment. */
+  send_chat: (payload: { roomCode: string; text: string; afterLogIndex: number }, cb: (res: ActionResult) => void) => void;
 }
 
 export interface RoomLifecycleServerToClientEvents<TSeat extends string, TView> {

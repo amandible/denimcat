@@ -1,3 +1,4 @@
+import type { ChatMessage } from '@denimcat/shared';
 import { getDb } from '../db/client';
 
 export interface PersistedSeat {
@@ -48,6 +49,8 @@ export interface PersistedRoom<TState, TSeat extends string> {
    * simply starts empty for any room persisted before accounts existed.
    */
   knownAccounts?: Partial<Record<TSeat, string>>;
+  /** Never cleared, bounded by RoomStore.MAX_CHAT_HISTORY. Optional only for backward compatibility with rooms persisted before this feature — RoomStore.hydrateRoom defaults it to []. */
+  chatMessages?: ChatMessage[];
   createdAt: number;
   lastActivityAt: number;
 }

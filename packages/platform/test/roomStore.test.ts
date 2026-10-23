@@ -588,3 +588,54 @@ describe('RoomStore.listOpenRoomsForAccount', () => {
     store.stop();
   });
 });
+
+describe('RoomStore.sendChatMessage', () => {
+  it("appends a message bound to the sender's seat, visible via room info", async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1');
+
+    const result = await store.sendChatMessage(created.roomCode, 'socket-1', 'hello', 3, 'Alice');
+    expect(result).toEqual({ ok: true });
+
+    const info = await store.getRoomInfo(created.roomCode);
+    expect(info?.chatMessages).toHaveLength(1);
+    expect(info?.chatMessages[0]).toMatchObject({ seat: 'p1', name: 'Alice', text: 'hello', afterLogIndex: 3 });
+    expect(typeof info?.chatMessages[0].id).toBe('string');
+    store.stop();
+  });
+
+  it('rejects a chat message from a socket not bound to that room', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await store.sendChatMessage(created.roomCode, 'unbound-socket', 'hi', 0);
+    expect(result).toEqual({ ok: false, error: { code: 'NOT_IN_ROOM', message: expect.any(String) } });
+    store.stop();
+  });
+
+  it('caps chat history, dropping the oldest message once it exceeds the limit', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1');
+
+    for (let i = 0; i < 201; i++) {
+      await store.sendChatMessage(created.roomCode, 'socket-1', `msg-${i}`, 0);
+    }
+
+    const info = await store.getRoomInfo(created.roomCode);
+    expect(info?.chatMessages).toHaveLength(200);
+    expect(info?.chatMessages[0].text).toBe('msg-1'); // msg-0 was the oldest, dropped
+    expect(info?.chatMessages[199].text).toBe('msg-200');
+    store.stop();
+  });
+});

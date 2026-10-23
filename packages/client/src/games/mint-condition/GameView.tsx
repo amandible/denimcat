@@ -12,7 +12,7 @@ import { ScoreBoard } from './components/ScoreBoard';
 import { PlayerCounts } from './components/PlayerCounts';
 import { RulesContent } from './components/RulesContent';
 import { RulesModal } from '../../components/RulesModal';
-import { LogPanel } from '../../components/LogPanel';
+import { ActivityPanel } from '../../components/ActivityPanel';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: MintConditionConnection }) {
@@ -133,7 +133,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         </div>
 
         <div style={{ marginTop: 16 }}>
-          <LogPanel entries={gameState.log} />
+          <ActivityPanel
+            log={gameState.log}
+            chatMessages={connection.roomInfo?.chatMessages ?? []}
+            onSend={(text) => connection.sendAction('send_chat', { text, afterLogIndex: gameState.log.length })}
+            seatLabel={seatLabel as (seat: string) => string}
+          />
         </div>
 
         {connection.lastError && <p style={{ color: 'crimson' }}>{connection.lastError}</p>}

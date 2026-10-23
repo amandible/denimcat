@@ -260,4 +260,26 @@ describe('Mint Condition room + game flow over real sockets', () => {
     });
     expect(badReconnect.ok).toBe(false);
   });
+
+  it('send_chat appends a message visible to other connected sockets, and rejects an over-length or malformed one', async () => {
+    const p1 = await connect();
+    const p2 = await connect();
+    const roomCode = await createRoom(p1, { playerCount: 2 });
+    await emitAck<any>(p1, 'join_room', { roomCode, role: 'p1' });
+    await emitAck<any>(p2, 'join_room', { roomCode, role: 'p2' });
+
+    const sent = await emitAck<any>(p1, 'send_chat', { roomCode, text: 'hello there', afterLogIndex: 0 });
+    expect(sent.ok).toBe(true);
+
+    const peek = await emitAck<any>(p2, 'peek_room', { roomCode });
+    expect(peek.ok).toBe(true);
+    expect(peek.roomInfo.chatMessages).toHaveLength(1);
+    expect(peek.roomInfo.chatMessages[0]).toMatchObject({ seat: 'p1', text: 'hello there', afterLogIndex: 0 });
+
+    const tooLong = await emitAck<any>(p1, 'send_chat', { roomCode, text: 'x'.repeat(501), afterLogIndex: 0 });
+    expect(tooLong.ok).toBe(false);
+
+    const badIndex = await emitAck<any>(p1, 'send_chat', { roomCode, text: 'hi', afterLogIndex: -1 });
+    expect(badIndex.ok).toBe(false);
+  });
 });

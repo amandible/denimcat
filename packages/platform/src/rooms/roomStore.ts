@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import type { Namespace } from 'socket.io';
-import type { ActionResult, EngineResult, JoinResult, Role, RoomInfo } from '@denimcat/shared';
+import type { ActionResult, ChatMessage, EngineResult, JoinResult, Role, RoomInfo } from '@denimcat/shared';
 import { createNoopEmailSender, type EmailSender } from '../email';
 import type { GameModule } from '../gameModule';
 import { generateRoomCode } from './roomCode';
@@ -9,6 +9,8 @@ import type { PersistedRoom, RoomRepository } from './roomRepository';
 const RECONNECT_GRACE_MS = 2 * 60 * 1000;
 const IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
 const IDLE_ROOM_TIMEOUT_MS = 30 * 60 * 1000;
+/** Oldest messages drop once a room's chat exceeds this, bounding the per-room JSONB blob for long-running async games. */
+const MAX_CHAT_HISTORY = 200;
 /**
  * A room where ANY seat has ever supplied an email (see LiveRoom.knownEmails
  * and idleTimeoutFor's own doc comment for why "any" rather than "every")
@@ -38,6 +40,8 @@ interface LiveRoom<TState, TSeat extends string> {
   knownEmails: Partial<Record<TSeat, string>>;
   /** Every signed-in account that has EVER held a seat — see PersistedRoom.knownAccounts's doc comment. */
   knownAccounts: Partial<Record<TSeat, string>>;
+  /** See PersistedRoom.chatMessages's doc comment. */
+  chatMessages: ChatMessage[];
   spectatorSocketIds: Set<string>;
   createdAt: number;
   lastActivityAt: number;
@@ -148,6 +152,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seats: {},
       knownEmails: {},
       knownAccounts: {},
+      chatMessages: [],
       spectatorSocketIds: new Set(),
       createdAt: now,
       lastActivityAt: now,
@@ -195,6 +200,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seats,
       knownEmails,
       knownAccounts,
+      chatMessages: persisted.chatMessages ?? [],
       spectatorSocketIds: new Set(),
       createdAt: persisted.createdAt,
       lastActivityAt: persisted.lastActivityAt,
@@ -530,7 +536,13 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       const s = room.seats[seat];
       if (s) seats[seat] = { connected: s.socketId !== null, name: s.name };
     }
-    return { code: room.code, seatOrder: [...room.seatOrder], seats, spectatorCount: room.spectatorSocketIds.size };
+    return {
+      code: room.code,
+      seatOrder: [...room.seatOrder],
+      seats,
+      spectatorCount: room.spectatorSocketIds.size,
+      chatMessages: room.chatMessages,
+    };
   }
 
   private broadcastRoomInfo(room: LiveRoom<TState, TSeat>): void {
@@ -571,6 +583,45 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return out;
   }
 
+  /**
+   * Appends a chat message and broadcasts the updated room info — chat
+   * rides along on the existing RoomInfo/room_update mechanism rather
+   * than its own event type. `afterLogIndex` is client-computed (see
+   * ChatMessage's doc comment in @denimcat/shared): this method never
+   * inspects `room.gameState` itself, since RoomStore is generic over an
+   * opaque game state and must stay that way. `senderName` comes from
+   * the caller (roomHandlers.ts's accountDisplayNameOf) — RoomStore has
+   * no socket access of its own.
+   */
+  async sendChatMessage(
+    code: string,
+    socketId: string,
+    text: string,
+    afterLogIndex: number,
+    senderName?: string,
+  ): Promise<ActionResult> {
+    const room = await this.getRoom(code);
+    if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
+    const binding = this.socketBindings.get(socketId);
+    if (!binding || binding.code !== code) {
+      return { ok: false, error: { code: 'NOT_IN_ROOM', message: 'Not connected to this room.' } };
+    }
+    const message: ChatMessage = {
+      id: nanoid(8),
+      seat: binding.role,
+      name: senderName,
+      text,
+      at: Date.now(),
+      afterLogIndex,
+    };
+    room.chatMessages.push(message);
+    if (room.chatMessages.length > MAX_CHAT_HISTORY) room.chatMessages.shift();
+    room.lastActivityAt = Date.now();
+    await this.persist(room);
+    this.broadcastRoomInfo(room);
+    return { ok: true };
+  }
+
   private async persist(room: LiveRoom<TState, TSeat>): Promise<void> {
     const seats = {} as Partial<Record<TSeat, { seatToken: string; email?: string; name?: string }>>;
     for (const seat of room.seatOrder) {
@@ -585,6 +636,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seats,
       knownEmails: { ...room.knownEmails },
       knownAccounts: { ...room.knownAccounts },
+      chatMessages: [...room.chatMessages],
       createdAt: room.createdAt,
       lastActivityAt: room.lastActivityAt,
     };
