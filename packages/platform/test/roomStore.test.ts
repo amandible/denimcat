@@ -197,6 +197,32 @@ describe('RoomStore — reconnecting by account identity', () => {
     expect(result.ok).toBe(true);
     store.stop();
   });
+
+  it('reconnectRoom never reassigns a seat already associated with a different account, even with a valid seat token', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const joined = await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    expect(joined.ok).toBe(true);
+    if (!joined.ok) return;
+
+    // A seat token lives in browser-scoped localStorage, not account-scoped
+    // storage — simulates a second account signed in on the same browser
+    // presenting alice's still-valid stored token for this seat.
+    const reconnected = await store.reconnectRoom(created.roomCode, 'p1', joined.seatToken!, 'socket-2', 'mallory@example.com');
+    expect(reconnected.ok).toBe(true); // the live takeover itself still succeeds — the token is valid
+
+    // But ownership-of-record must still be alice's: mallory's account must
+    // NOT be able to reclaim this seat later via reconnect_by_account.
+    expect((await store.reconnectByAccount(created.roomCode, 'mallory@example.com', 'socket-3')).ok).toBe(false);
+    const aliceStillOwns = await store.reconnectByAccount(created.roomCode, 'alice@example.com', 'socket-4');
+    expect(aliceStillOwns.ok).toBe(true);
+    if (aliceStillOwns.ok) expect(aliceStillOwns.you).toEqual({ role: 'p1' });
+    store.stop();
+  });
 });
 
 type TurnSeat = 'p1' | 'p2';

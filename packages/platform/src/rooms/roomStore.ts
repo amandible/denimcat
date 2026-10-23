@@ -274,7 +274,12 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     // Backfills knownAccounts for a seat that predates this feature, or was
     // last (re)joined before this browser's account was known — the very
     // next account-based reconnect attempt (any device) then just works.
-    if (accountEmail) room.knownAccounts[role] = accountEmail;
+    // Never overwrites an existing DIFFERENT account: a seat token lives in
+    // browser-scoped localStorage, not account-scoped storage, so a second
+    // account signed in on the same browser could otherwise present this
+    // seat's stored token and silently reassign ownership away from the
+    // account that actually holds it.
+    if (accountEmail && !room.knownAccounts[role]) room.knownAccounts[role] = accountEmail;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
