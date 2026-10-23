@@ -15,6 +15,7 @@ import { TashKalarRoom } from '../../../private-games/other-games/client-tashkal
 import { KingsGateRoom } from '../../../private-games/other-games/client-kingsgate/KingsGateRoom';
 import { loadSessionToken, onSessionInvalidated, saveIdentity } from './state/authToken';
 import { SERVER_URL } from './socket';
+import { Footer } from './components/Footer';
 
 type Slug = 'hyperbloom' | 'mint-condition' | 'love-triangles' | 'tashkalar' | 'kingsgate';
 
@@ -105,16 +106,25 @@ export function App() {
   // The verify route must be reachable while signed-out, by definition —
   // it's how signing in actually happens — so it's checked before the
   // session-gate early-returns below.
-  if (route.kind === 'auth-verify') return <VerifyView token={route.token} onVerified={handleVerified} />;
-  if (session === 'checking') return null;
-  if (session === 'signed-out') return <SignInGate />;
+  function renderRoute() {
+    if (route.kind === 'auth-verify') return <VerifyView token={route.token} onVerified={handleVerified} />;
+    if (session === 'checking') return null;
+    if (session === 'signed-out') return <SignInGate />;
 
-  if (route.kind === 'home') return <HomeView />;
-  if (route.kind === 'settings') return <SettingsView />;
-  if (route.kind === 'game-home') {
-    const GameHome = HOME_VIEWS[route.slug];
-    return <GameHome />;
+    if (route.kind === 'home') return <HomeView />;
+    if (route.kind === 'settings') return <SettingsView />;
+    if (route.kind === 'game-home') {
+      const GameHome = HOME_VIEWS[route.slug];
+      return <GameHome />;
+    }
+    const Room = ROOM_VIEWS[route.slug];
+    return <Room roomCode={route.roomCode} />;
   }
-  const Room = ROOM_VIEWS[route.slug];
-  return <Room roomCode={route.roomCode} />;
+
+  return (
+    <>
+      {renderRoute()}
+      <Footer />
+    </>
+  );
 }
