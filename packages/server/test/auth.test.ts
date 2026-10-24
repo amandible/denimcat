@@ -65,11 +65,11 @@ describe('auth HTTP routes', () => {
     }).then((r) => r.json());
   }
 
-  function updateProfile(token: string | undefined, displayName: unknown) {
+  function updateProfile(token: string | undefined, displayName: unknown, turnChimeEnabled: unknown = true) {
     return fetch(`${baseUrl}/auth/profile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ displayName }),
+      body: JSON.stringify({ displayName, turnChimeEnabled }),
     }).then((r) => r.json());
   }
 
@@ -129,7 +129,7 @@ describe('auth HTTP routes', () => {
     const token = linkFromSender('alice@example.com');
     const { sessionToken } = await verify(token);
 
-    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: null });
+    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: null, turnChimeEnabled: true });
     expect(await session()).toEqual({ ok: false });
     expect(await session('garbage')).toEqual({ ok: false });
   });
@@ -148,8 +148,8 @@ describe('auth HTTP routes', () => {
     const token = linkFromSender('alice@example.com');
     const { sessionToken } = await verify(token);
 
-    expect(await updateProfile(sessionToken, 'Alice')).toEqual({ ok: true, displayName: 'Alice' });
-    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: 'Alice' });
+    expect(await updateProfile(sessionToken, 'Alice')).toEqual({ ok: true, displayName: 'Alice', turnChimeEnabled: true });
+    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: 'Alice', turnChimeEnabled: true });
   });
 
   it('trims a display name and caps it at 40 characters', async () => {
@@ -157,12 +157,30 @@ describe('auth HTTP routes', () => {
     const { sessionToken } = await verify(linkFromSender('alice@example.com'));
 
     const result = await updateProfile(sessionToken, `  ${'x'.repeat(50)}  `);
-    expect(result).toEqual({ ok: true, displayName: 'x'.repeat(40) });
+    expect(result).toEqual({ ok: true, displayName: 'x'.repeat(40), turnChimeEnabled: true });
   });
 
-  it('rejects an update with no/invalid session token', async () => {
+  it('saving turnChimeEnabled is reflected in a later /auth/session call, defaulting to true', async () => {
+    await requestLink('alice@example.com');
+    const { sessionToken } = await verify(linkFromSender('alice@example.com'));
+
+    // Defaults to true before anyone ever saves the form.
+    expect(await session(sessionToken)).toMatchObject({ turnChimeEnabled: true });
+
+    expect(await updateProfile(sessionToken, 'Alice', false)).toEqual({ ok: true, displayName: 'Alice', turnChimeEnabled: false });
+    expect(await session(sessionToken)).toMatchObject({ turnChimeEnabled: false });
+
+    expect(await updateProfile(sessionToken, 'Alice', true)).toEqual({ ok: true, displayName: 'Alice', turnChimeEnabled: true });
+    expect(await session(sessionToken)).toMatchObject({ turnChimeEnabled: true });
+  });
+
+  it('rejects an update with no/invalid session token, or a non-boolean turnChimeEnabled', async () => {
     expect(await updateProfile(undefined, 'Alice')).toEqual({ ok: false });
     expect(await updateProfile('garbage', 'Alice')).toEqual({ ok: false });
+
+    await requestLink('alice@example.com');
+    const { sessionToken } = await verify(linkFromSender('alice@example.com'));
+    expect(await updateProfile(sessionToken, 'Alice', 'not-a-boolean')).toEqual({ ok: false });
   });
 });
 

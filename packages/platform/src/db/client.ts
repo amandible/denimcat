@@ -45,6 +45,11 @@ export async function ensureSchema(): Promise<void> {
   // that was already created before this column existed, unlike the
   // no-op-against-an-existing-table CREATE TABLE IF NOT EXISTS pattern.
   await db`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS display_name TEXT`;
+  // NOT NULL DEFAULT true (rather than nullable like display_name) means
+  // every row — existing and new — already reads as "on" with no app-level
+  // null-coalescing needed: the whole point is this preference ships with
+  // no behavior change for anyone.
+  await db`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS turn_chime_enabled BOOLEAN NOT NULL DEFAULT true`;
   await db`
     CREATE TABLE IF NOT EXISTS magic_links (
       token TEXT PRIMARY KEY,

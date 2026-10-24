@@ -1,19 +1,19 @@
 import { useState, type FormEvent } from 'react';
 import { SERVER_URL } from '../socket';
-import { loadAuthEmail, loadDisplayName, loadSessionToken, saveIdentity } from '../state/authToken';
-import { isTurnChimeEnabled, setTurnChimeEnabled } from '../state/chime';
+import { loadAuthEmail, loadDisplayName, loadSessionToken, loadTurnChimeEnabled, saveIdentity } from '../state/authToken';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 /**
- * Minimal account settings: just a display name for now, pre-filled from
- * the cached profile. Saving it here is what lets LobbyView default its
- * per-room "your name" field without asking again every time.
+ * Account settings — all of it account-level (not per-browser), saved
+ * together via the one Save button below: a display name, and whether to
+ * play a sound when it becomes your turn. Pre-filled from the cached
+ * profile so this screen doesn't need a loading state of its own.
  */
 export function SettingsView() {
   const [displayName, setDisplayName] = useState(loadDisplayName() ?? '');
+  const [turnChimeEnabled, setTurnChimeEnabled] = useState(loadTurnChimeEnabled());
   const [status, setStatus] = useState<SaveStatus>('idle');
-  const [turnChimeEnabled, setTurnChimeEnabledState] = useState(isTurnChimeEnabled());
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -23,17 +23,18 @@ export function SettingsView() {
     fetch(`${SERVER_URL}/auth/profile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ displayName }),
+      body: JSON.stringify({ displayName, turnChimeEnabled }),
     })
       .then((res) => res.json())
-      .then((result: { ok: true; displayName: string } | { ok: false }) => {
+      .then((result: { ok: true; displayName: string; turnChimeEnabled: boolean } | { ok: false }) => {
         if (!result.ok) {
           setStatus('error');
           return;
         }
         setDisplayName(result.displayName);
+        setTurnChimeEnabled(result.turnChimeEnabled);
         const email = loadAuthEmail();
-        if (email) saveIdentity(email, result.displayName);
+        if (email) saveIdentity(email, result.displayName, result.turnChimeEnabled);
         setStatus('saved');
       })
       .catch(() => setStatus('error'));
@@ -47,7 +48,7 @@ export function SettingsView() {
         </a>
         <h1 style={{ fontSize: 28, marginTop: 8 }}>Settings</h1>
         <form onSubmit={handleSubmit}>
-          <label style={{ display: 'block', marginBottom: 12 }}>
+          <label style={{ display: 'block', marginBottom: 16 }}>
             <span style={{ display: 'block', fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>Display name</span>
             <input
               type="text"
@@ -61,27 +62,25 @@ export function SettingsView() {
               style={{ width: '100%', padding: 10, fontSize: 14, border: '1px solid var(--border)', borderRadius: 8 }}
             />
           </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <input
+              type="checkbox"
+              checked={turnChimeEnabled}
+              onChange={(e) => {
+                setTurnChimeEnabled(e.target.checked);
+                setStatus('idle');
+              }}
+            />
+            <span style={{ fontSize: 14 }}>Play a sound when it becomes my turn</span>
+          </label>
+
           <button className="btn btn-primary" type="submit" disabled={status === 'saving'} style={{ padding: 12, fontSize: 16 }}>
             Save
           </button>
           {status === 'saved' && <p style={{ color: 'var(--accent)' }}>Saved.</p>}
           {status === 'error' && <p style={{ color: 'crimson' }}>Couldn't save — try again.</p>}
         </form>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
-          <input
-            type="checkbox"
-            checked={turnChimeEnabled}
-            onChange={(e) => {
-              setTurnChimeEnabledState(e.target.checked);
-              setTurnChimeEnabled(e.target.checked);
-            }}
-          />
-          <span style={{ fontSize: 14 }}>Play a sound when it becomes my turn</span>
-        </label>
-        <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0 24px' }}>
-          Only while a game is open in a tab in this browser. Saved immediately — no need to hit Save.
-        </p>
       </div>
     </main>
   );

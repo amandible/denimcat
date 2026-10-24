@@ -85,8 +85,8 @@ export function App() {
     }
     fetch(`${SERVER_URL}/auth/session`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
-      .then((result: { ok: true; email: string; displayName: string | null } | { ok: false }) => {
-        if (result.ok) saveIdentity(result.email, result.displayName);
+      .then((result: { ok: true; email: string; displayName: string | null; turnChimeEnabled: boolean } | { ok: false }) => {
+        if (result.ok) saveIdentity(result.email, result.displayName, result.turnChimeEnabled);
         setSession(result.ok ? 'signed-in' : 'signed-out');
       })
       .catch(() => setSession('signed-out'));

@@ -103,3 +103,25 @@ describe('display name', () => {
     expect(await repo.getDisplayName('bob@example.com')).toBe('Bob');
   });
 });
+
+describe('turn chime preference', () => {
+  it('defaults to true before any account exists or any preference is set', async () => {
+    const repo = new InMemoryAuthRepository();
+    expect(await repo.getTurnChimeEnabled('alice@example.com')).toBe(true);
+    await repo.getOrCreateAccount('alice@example.com');
+    expect(await repo.getTurnChimeEnabled('alice@example.com')).toBe(true);
+  });
+
+  it('setTurnChimeEnabled persists false, and is readable by a differently-cased email', async () => {
+    const repo = new InMemoryAuthRepository();
+    await repo.getOrCreateAccount('alice@example.com');
+    await repo.setTurnChimeEnabled('Alice@Example.com', false);
+    expect(await repo.getTurnChimeEnabled('  alice@example.com  ')).toBe(false);
+  });
+
+  it('setTurnChimeEnabled creates the account row if one does not already exist', async () => {
+    const repo = new InMemoryAuthRepository();
+    await repo.setTurnChimeEnabled('bob@example.com', false);
+    expect(await repo.getTurnChimeEnabled('bob@example.com')).toBe(false);
+  });
+});

@@ -1,6 +1,7 @@
 const KEY = 'denimcat:auth:session';
 const EMAIL_KEY = 'denimcat:auth:email';
 const DISPLAY_NAME_KEY = 'denimcat:auth:displayName';
+const TURN_CHIME_ENABLED_KEY = 'denimcat:auth:turnChimeEnabled';
 
 export function loadSessionToken(): string | null {
   try {
@@ -43,11 +44,21 @@ export function loadDisplayName(): string | null {
   }
 }
 
-export function saveIdentity(email: string, displayName: string | null): void {
+/** Account-level (not per-browser), saved via Settings alongside the display name — chime.ts's playTurnChime reads this cache directly. Defaults to true, matching the server's default for an account that's never saved Settings. */
+export function loadTurnChimeEnabled(): boolean {
+  try {
+    return localStorage.getItem(TURN_CHIME_ENABLED_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+export function saveIdentity(email: string, displayName: string | null, turnChimeEnabled: boolean): void {
   try {
     localStorage.setItem(EMAIL_KEY, email);
     if (displayName) localStorage.setItem(DISPLAY_NAME_KEY, displayName);
     else localStorage.removeItem(DISPLAY_NAME_KEY);
+    localStorage.setItem(TURN_CHIME_ENABLED_KEY, turnChimeEnabled ? '1' : '0');
   } catch {
     // ignore — same fallback as the session token above
   }
@@ -57,6 +68,7 @@ function clearIdentity(): void {
   try {
     localStorage.removeItem(EMAIL_KEY);
     localStorage.removeItem(DISPLAY_NAME_KEY);
+    localStorage.removeItem(TURN_CHIME_ENABLED_KEY);
   } catch {
     // ignore
   }

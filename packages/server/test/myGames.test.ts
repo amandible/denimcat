@@ -201,11 +201,17 @@ describe('GET /my-games', () => {
     const aliceSocket = await connect(aliceToken);
     const bobSocket = await connect(bobToken);
 
+    // createdAt has millisecond resolution — a tiny delay between each
+    // "older"/"newer" pair guarantees they actually land in different
+    // milliseconds, so the sort-order assertion below isn't a coin flip.
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
     // Bob opens (p1), so it's not alice's turn in either "waiting" room.
     const waitingOlder = await emitAck<{ ok: true; roomCode: string }>(bobSocket, 'create_room', { playerCount: 2 });
     await emitAck(bobSocket, 'join_room', { roomCode: waitingOlder.roomCode, role: 'p1' });
     await emitAck(aliceSocket, 'join_room', { roomCode: waitingOlder.roomCode, role: 'p2' });
 
+    await tick();
     const waitingNewer = await emitAck<{ ok: true; roomCode: string }>(bobSocket, 'create_room', { playerCount: 2 });
     await emitAck(bobSocket, 'join_room', { roomCode: waitingNewer.roomCode, role: 'p1' });
     await emitAck(aliceSocket, 'join_room', { roomCode: waitingNewer.roomCode, role: 'p2' });
@@ -214,6 +220,7 @@ describe('GET /my-games', () => {
     const turnOlder = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
     await emitAck(aliceSocket, 'join_room', { roomCode: turnOlder.roomCode, role: 'p1' });
 
+    await tick();
     const turnNewer = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
     await emitAck(aliceSocket, 'join_room', { roomCode: turnNewer.roomCode, role: 'p1' });
     await emitAck(bobSocket, 'join_room', { roomCode: turnNewer.roomCode, role: 'p2', name: 'Bob' });

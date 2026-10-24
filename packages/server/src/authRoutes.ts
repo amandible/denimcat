@@ -57,11 +57,12 @@ export function authRouter(authService: AuthService, clientOrigins: string[]): R
   router.post('/profile', async (req, res) => {
     const token = bearerToken(req);
     const displayName = req.body?.displayName;
-    if (!token || typeof displayName !== 'string') {
+    const turnChimeEnabled = req.body?.turnChimeEnabled;
+    if (!token || typeof displayName !== 'string' || typeof turnChimeEnabled !== 'boolean') {
       res.json({ ok: false });
       return;
     }
-    const result = await authService.updateDisplayName(token, displayName);
+    const result = await authService.updateProfile(token, { displayName, turnChimeEnabled });
     res.json(result ? { ok: true, ...result } : { ok: false });
   });
 

@@ -19,18 +19,21 @@ export interface AuthRepository {
   /** Null means no account row (shouldn't normally happen post-sign-in) or no display name set yet — both render the same way client-side (fall back to empty). */
   getDisplayName(email: string): Promise<string | null>;
   setDisplayName(email: string, displayName: string): Promise<void>;
+  /** Defaults to true (ships with no behavior change) — see the turn_chime_enabled column's NOT NULL DEFAULT true in db/client.ts. */
+  getTurnChimeEnabled(email: string): Promise<boolean>;
+  setTurnChimeEnabled(email: string, enabled: boolean): Promise<void>;
 }
 
 /** Used for tests and as the sole store when no DATABASE_URL is configured. */
 export class InMemoryAuthRepository implements AuthRepository {
-  private accounts = new Map<string, { displayName: string | null }>();
+  private accounts = new Map<string, { displayName: string | null; turnChimeEnabled: boolean }>();
   private magicLinks = new Map<string, { email: string; expiresAt: number; usedAt: number | null; createdAt: number }>();
   private sessions = new Map<string, { email: string; expiresAt: number }>();
 
   async getOrCreateAccount(email: string): Promise<{ email: string; isNew: boolean }> {
     const normalized = normalizeEmail(email);
     if (this.accounts.has(normalized)) return { email: normalized, isNew: false };
-    this.accounts.set(normalized, { displayName: null });
+    this.accounts.set(normalized, { displayName: null, turnChimeEnabled: true });
     return { email: normalized, isNew: true };
   }
 
@@ -40,8 +43,19 @@ export class InMemoryAuthRepository implements AuthRepository {
 
   async setDisplayName(email: string, displayName: string): Promise<void> {
     const normalized = normalizeEmail(email);
-    const existing = this.accounts.get(normalized) ?? { displayName: null };
+    const existing = this.accounts.get(normalized) ?? { displayName: null, turnChimeEnabled: true };
     existing.displayName = displayName;
+    this.accounts.set(normalized, existing);
+  }
+
+  async getTurnChimeEnabled(email: string): Promise<boolean> {
+    return this.accounts.get(normalizeEmail(email))?.turnChimeEnabled ?? true;
+  }
+
+  async setTurnChimeEnabled(email: string, enabled: boolean): Promise<void> {
+    const normalized = normalizeEmail(email);
+    const existing = this.accounts.get(normalized) ?? { displayName: null, turnChimeEnabled: true };
+    existing.turnChimeEnabled = enabled;
     this.accounts.set(normalized, existing);
   }
 
@@ -214,6 +228,32 @@ export class PostgresAuthRepository implements AuthRepository {
       `;
     } catch (error) {
       console.error('[db] failed to set display name:', error);
+    }
+  }
+
+  async getTurnChimeEnabled(email: string): Promise<boolean> {
+    const db = getDb();
+    if (!db) return true;
+    try {
+      const rows = await db<{ turn_chime_enabled: boolean }[]>`
+        SELECT turn_chime_enabled FROM accounts WHERE email = ${normalizeEmail(email)}
+      `;
+      return rows[0]?.turn_chime_enabled ?? true;
+    } catch (error) {
+      console.error('[db] failed to read turn chime preference:', error);
+      return true;
+    }
+  }
+
+  async setTurnChimeEnabled(email: string, enabled: boolean): Promise<void> {
+    const db = getDb();
+    if (!db) return;
+    try {
+      await db`
+        UPDATE accounts SET turn_chime_enabled = ${enabled} WHERE email = ${normalizeEmail(email)}
+      `;
+    } catch (error) {
+      console.error('[db] failed to set turn chime preference:', error);
     }
   }
 }

@@ -15,11 +15,21 @@ export interface AuthService {
   requestLink(email: string): Promise<void>;
   verifyToken(
     token: string,
-  ): Promise<{ sessionToken: string; expiresAt: number; email: string; displayName: string | null } | null>;
-  checkSession(token: string): Promise<{ email: string; displayName: string | null } | null>;
+  ): Promise<{ sessionToken: string; expiresAt: number; email: string; displayName: string | null; turnChimeEnabled: boolean } | null>;
+  checkSession(token: string): Promise<{ email: string; displayName: string | null; turnChimeEnabled: boolean } | null>;
   signOut(token: string): Promise<void>;
-  /** Null session means the bearer token is missing/expired — distinct from a successful save, which always echoes the (possibly empty-string) name back. */
-  updateDisplayName(sessionToken: string, displayName: string): Promise<{ displayName: string } | null>;
+  /**
+   * Saves every Settings-page preference in one request — deliberately
+   * unified rather than one method per field, since everything on that
+   * page is account-level and submitted together via its single Save
+   * button. Null session means the bearer token is missing/expired —
+   * distinct from a successful save, which always echoes back what was
+   * actually saved (e.g. the trimmed display name).
+   */
+  updateProfile(
+    sessionToken: string,
+    updates: { displayName: string; turnChimeEnabled: boolean },
+  ): Promise<{ displayName: string; turnChimeEnabled: boolean } | null>;
 }
 
 /**
@@ -68,26 +78,29 @@ export function createAuthService(
       const expiresAt = Date.now() + SESSION_TTL_MS;
       await repo.createSession(consumed.email, sessionToken, expiresAt);
       const displayName = await repo.getDisplayName(consumed.email);
-      return { sessionToken, expiresAt, email: consumed.email, displayName };
+      const turnChimeEnabled = await repo.getTurnChimeEnabled(consumed.email);
+      return { sessionToken, expiresAt, email: consumed.email, displayName, turnChimeEnabled };
     },
 
     async checkSession(token: string) {
       const session = await repo.getSession(token);
       if (!session) return null;
       const displayName = await repo.getDisplayName(session.email);
-      return { email: session.email, displayName };
+      const turnChimeEnabled = await repo.getTurnChimeEnabled(session.email);
+      return { email: session.email, displayName, turnChimeEnabled };
     },
 
     async signOut(token: string): Promise<void> {
       await repo.deleteSession(token);
     },
 
-    async updateDisplayName(sessionToken: string, displayName: string) {
+    async updateProfile(sessionToken: string, updates: { displayName: string; turnChimeEnabled: boolean }) {
       const session = await repo.getSession(sessionToken);
       if (!session) return null;
-      const trimmed = displayName.trim().slice(0, 40);
+      const trimmed = updates.displayName.trim().slice(0, 40);
       await repo.setDisplayName(session.email, trimmed);
-      return { displayName: trimmed };
+      await repo.setTurnChimeEnabled(session.email, updates.turnChimeEnabled);
+      return { displayName: trimmed, turnChimeEnabled: updates.turnChimeEnabled };
     },
   };
 }

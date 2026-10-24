@@ -3,6 +3,9 @@ import { SERVER_URL } from '../socket';
 import { saveIdentity, saveSessionToken } from '../state/authToken';
 
 type VerifyStatus = 'verifying' | 'invalid';
+type VerifyResult =
+  | { ok: true; sessionToken: string; email: string; displayName: string | null; turnChimeEnabled: boolean }
+  | { ok: false };
 
 /**
  * Landing page for a clicked magic-link email (`/auth/verify?token=...`).
@@ -29,10 +32,10 @@ export function VerifyView({ token, onVerified }: { token: string; onVerified: (
       body: JSON.stringify({ token }),
     })
       .then((res) => res.json())
-      .then((result: { ok: true; sessionToken: string; email: string; displayName: string | null } | { ok: false }) => {
+      .then((result: VerifyResult) => {
         if (result.ok) {
           saveSessionToken(result.sessionToken);
-          saveIdentity(result.email, result.displayName);
+          saveIdentity(result.email, result.displayName, result.turnChimeEnabled);
           onVerified();
         } else {
           setStatus('invalid');

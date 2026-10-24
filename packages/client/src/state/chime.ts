@@ -1,21 +1,4 @@
-const PREF_KEY = 'denimcat:prefs:turnChime';
-
-/** Whether the turn chime should play — defaults to true (on) when the preference has never been set, so this ships with no behavior change. Per-browser, not synced to the account: the chime only ever matters while this browser has a tab open on a game. */
-export function isTurnChimeEnabled(): boolean {
-  try {
-    return localStorage.getItem(PREF_KEY) !== '0';
-  } catch {
-    return true;
-  }
-}
-
-export function setTurnChimeEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(PREF_KEY, enabled ? '1' : '0');
-  } catch {
-    // localStorage unavailable (private browsing, etc.) — the toggle just won't persist across reloads.
-  }
-}
+import { loadTurnChimeEnabled } from './authToken';
 
 /**
  * A short, synthesized two-note chime via the Web Audio API — no audio
@@ -52,7 +35,7 @@ function playTone(ctx: AudioContext, startTime: number, frequency: number, durat
 
 /** A soft rising two-note chime (A5 -> E6) — plays once, fire-and-forget. No-ops in an environment without Web Audio (e.g. a test runner), or when the player has turned it off in Settings. */
 export function playTurnChime(): void {
-  if (!isTurnChimeEnabled()) return;
+  if (!loadTurnChimeEnabled()) return;
   const ctx = getContext();
   if (!ctx) return;
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
