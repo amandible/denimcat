@@ -10,19 +10,19 @@ export const GAMES: GameDescriptor[] = [
     slug: 'hyperbloom',
     displayName: 'Hyper Bloom',
     namespace: '/hyperbloom',
-    tagline: 'A 2-4 player abstract deckbuilder.',
+    tagline: 'A 2-4 player abstract deckbuilder by shiobana.',
   },
   {
     slug: 'mint-condition',
     displayName: 'Mint Condition',
     namespace: '/mint-condition',
-    tagline: 'A 2-4 player auction.',
+    tagline: 'Auction game by a_mandible (testing).',
   },
   {
     slug: 'love-triangles',
     displayName: 'Love Triangles',
     namespace: '/love-triangles',
-    tagline: 'Claim lines to form loops.',
+    tagline: 'Claim lines to form loops - by a_mandible (testing).',
   },
   {
     slug: 'tashkalar',
