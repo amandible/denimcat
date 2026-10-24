@@ -51,14 +51,13 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
           lastActivityAt: summary.lastActivityAt,
           createdAt: summary.createdAt,
           cancelable: summary.cancelable,
+          otherPlayerNames: summary.otherPlayerNames,
         }));
       }),
     );
 
-    // Your-turn games first, most recently active first within each group.
-    const games = perGame
-      .flat()
-      .sort((a, b) => (a.isMyTurn === b.isMyTurn ? b.lastActivityAt - a.lastActivityAt : a.isMyTurn ? -1 : 1));
+    // Your-turn games first, most recently created first within each group.
+    const games = perGame.flat().sort((a, b) => (a.isMyTurn === b.isMyTurn ? b.createdAt - a.createdAt : a.isMyTurn ? -1 : 1));
 
     res.json({ ok: true, games });
   });

@@ -587,6 +587,44 @@ describe('RoomStore.listOpenRoomsForAccount', () => {
     expect(await store.listOpenRoomsForAccount('carol@example.com')).toEqual([]);
     store.stop();
   });
+
+  it("lists the other seat's name when given, and nothing when no other seat has joined or gave no name", async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    expect((await store.listOpenRoomsForAccount('alice@example.com'))[0].otherPlayerNames).toEqual([]);
+
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, 'Bob', 'bob@example.com');
+    expect((await store.listOpenRoomsForAccount('alice@example.com'))[0].otherPlayerNames).toEqual(['Bob']);
+    // Never shows my own seat's name among "other" players.
+    expect((await store.listOpenRoomsForAccount('bob@example.com'))[0].otherPlayerNames).toEqual([]);
+
+    store.stop();
+  });
+
+  it("keeps showing the other seat's name even after their seat's live record has fully expired", async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace(), { graceMs: 1 });
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, 'Bob', 'bob@example.com');
+
+    await store.handleDisconnect('socket-2');
+    await new Promise((resolve) => setTimeout(resolve, 20)); // let the 1ms grace timer fire and free the seat
+
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.seats.p2).toBeUndefined(); // the live seat record is really gone
+
+    expect((await store.listOpenRoomsForAccount('alice@example.com'))[0].otherPlayerNames).toEqual(['Bob']);
+    store.stop();
+  });
 });
 
 describe('RoomStore.sendChatMessage', () => {

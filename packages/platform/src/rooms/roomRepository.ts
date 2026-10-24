@@ -49,6 +49,17 @@ export interface PersistedRoom<TState, TSeat extends string> {
    * simply starts empty for any room persisted before accounts existed.
    */
   knownAccounts?: Partial<Record<TSeat, string>>;
+  /**
+   * Every display name a seat has EVER supplied, keyed by seat — the same
+   * "outlives a lapsed reconnect grace" need as knownEmails, for the same
+   * reason (seats[...].name is gone once expireSeat deletes the live seat
+   * entry), used by RoomStore.listOpenRoomsForAccount to show opponent
+   * names on the landing page's "your games" list even for a room nobody
+   * has touched in a week. Never cleared once set. Optional only for
+   * backward compatibility with rooms persisted before this field existed
+   * — RoomStore.hydrateRoom backfills it from `seats[...].name` on read.
+   */
+  knownNames?: Partial<Record<TSeat, string>>;
   /** Never cleared, bounded by RoomStore.MAX_CHAT_HISTORY. Optional only for backward compatibility with rooms persisted before this feature — RoomStore.hydrateRoom defaults it to []. */
   chatMessages?: ChatMessage[];
   createdAt: number;

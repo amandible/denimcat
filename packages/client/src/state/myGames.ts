@@ -13,6 +13,8 @@ export interface MyGame {
   createdAt: number;
   /** True when no other seat has ever been joined by a different account — safe to offer "cancel" for. */
   cancelable: boolean;
+  /** Display names of every other player who has ever joined, in seat order — empty if nobody else has joined yet or nobody gave a name. */
+  otherPlayerNames: string[];
 }
 
 /** The landing page's "your games" list — every currently-open room the signed-in account holds a seat in, across every game. Resolves to [] if signed out or on any error, same fail-soft convention as the rest of this inline-fetch pattern. */

@@ -194,4 +194,36 @@ describe('GET /my-games', () => {
     expect(refused).toEqual({ ok: false, error: { code: 'NOT_CANCELABLE', message: expect.any(String) } });
     expect((await myGames(aliceToken)).games.some((g: any) => g.code === sharedRoom.roomCode)).toBe(true);
   });
+
+  it('sorts your-turn games first, newest-created first within each group, and includes other players\' names', async () => {
+    const aliceToken = await signIn('alice@example.com');
+    const bobToken = await signIn('bob@example.com');
+    const aliceSocket = await connect(aliceToken);
+    const bobSocket = await connect(bobToken);
+
+    // Bob opens (p1), so it's not alice's turn in either "waiting" room.
+    const waitingOlder = await emitAck<{ ok: true; roomCode: string }>(bobSocket, 'create_room', { playerCount: 2 });
+    await emitAck(bobSocket, 'join_room', { roomCode: waitingOlder.roomCode, role: 'p1' });
+    await emitAck(aliceSocket, 'join_room', { roomCode: waitingOlder.roomCode, role: 'p2' });
+
+    const waitingNewer = await emitAck<{ ok: true; roomCode: string }>(bobSocket, 'create_room', { playerCount: 2 });
+    await emitAck(bobSocket, 'join_room', { roomCode: waitingNewer.roomCode, role: 'p1' });
+    await emitAck(aliceSocket, 'join_room', { roomCode: waitingNewer.roomCode, role: 'p2' });
+
+    // Alice opens (p1), so it's her turn in both of these.
+    const turnOlder = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+    await emitAck(aliceSocket, 'join_room', { roomCode: turnOlder.roomCode, role: 'p1' });
+
+    const turnNewer = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+    await emitAck(aliceSocket, 'join_room', { roomCode: turnNewer.roomCode, role: 'p1' });
+    await emitAck(bobSocket, 'join_room', { roomCode: turnNewer.roomCode, role: 'p2', name: 'Bob' });
+
+    const games = (await myGames(aliceToken)).games;
+    expect(games.map((g: any) => g.code)).toEqual([turnNewer.roomCode, turnOlder.roomCode, waitingNewer.roomCode, waitingOlder.roomCode]);
+
+    const turnNewerEntry = games.find((g: any) => g.code === turnNewer.roomCode);
+    expect(turnNewerEntry.otherPlayerNames).toEqual(['Bob']);
+    const turnOlderEntry = games.find((g: any) => g.code === turnOlder.roomCode);
+    expect(turnOlderEntry.otherPlayerNames).toEqual([]); // p2 never joined
+  });
 });

@@ -57,7 +57,10 @@ export function HomeView() {
                   <div>
                     {game.displayName} <span style={{ color: 'var(--muted)', fontSize: 13 }}>· room {game.code}</span>
                   </div>
-                  <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>Created {formatRelativeAge(game.createdAt)}</div>
+                  <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>
+                    {game.otherPlayerNames.length > 0 && `vs ${game.otherPlayerNames.join(', ')} · `}
+                    Created {formatRelativeAge(game.createdAt)}
+                  </div>
                 </a>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                   <strong style={{ color: game.isMyTurn ? 'var(--accent)' : 'var(--muted)', fontSize: 13 }}>

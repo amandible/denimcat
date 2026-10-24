@@ -40,6 +40,8 @@ interface LiveRoom<TState, TSeat extends string> {
   knownEmails: Partial<Record<TSeat, string>>;
   /** Every signed-in account that has EVER held a seat — see PersistedRoom.knownAccounts's doc comment. */
   knownAccounts: Partial<Record<TSeat, string>>;
+  /** Every display name any seat has EVER supplied — see PersistedRoom.knownNames's doc comment for why this outlives `seats`. */
+  knownNames: Partial<Record<TSeat, string>>;
   /** See PersistedRoom.chatMessages's doc comment. */
   chatMessages: ChatMessage[];
   spectatorSocketIds: Set<string>;
@@ -80,6 +82,8 @@ export interface OpenGameSummary<TSeat extends string> {
   createdAt: number;
   /** True when no OTHER seat has ever been joined by a different account — see RoomStore.cancelRoom, which re-verifies this itself rather than trusting the caller. */
   cancelable: boolean;
+  /** Display names of every OTHER seat that has ever supplied one (knownNames), in seat order — skips seats nobody's joined yet or that joined with no name given. */
+  otherPlayerNames: string[];
 }
 
 /**
@@ -155,6 +159,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seats: {},
       knownEmails: {},
       knownAccounts: {},
+      knownNames: {},
       chatMessages: [],
       spectatorSocketIds: new Set(),
       createdAt: now,
@@ -189,11 +194,13 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     // existed still has its emails sitting on `seats[...].email`.
     const knownEmails: Partial<Record<TSeat, string>> = { ...persisted.knownEmails };
     const knownAccounts: Partial<Record<TSeat, string>> = { ...persisted.knownAccounts };
+    const knownNames: Partial<Record<TSeat, string>> = { ...persisted.knownNames };
     for (const seat of persisted.seatOrder) {
       const persistedSeat = persisted.seats[seat];
       if (!persistedSeat) continue;
       seats[seat] = { seatToken: persistedSeat.seatToken, socketId: null, disconnectedAt: now, email: persistedSeat.email, name: persistedSeat.name };
       if (persistedSeat.email) knownEmails[seat] = persistedSeat.email;
+      if (persistedSeat.name) knownNames[seat] = persistedSeat.name;
     }
 
     const hydrated: LiveRoom<TState, TSeat> = {
@@ -203,6 +210,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seats,
       knownEmails,
       knownAccounts,
+      knownNames,
       chatMessages: persisted.chatMessages ?? [],
       spectatorSocketIds: new Set(),
       createdAt: persisted.createdAt,
@@ -254,6 +262,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     const seatToken = nanoid(21);
     room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name };
     if (email) room.knownEmails[role] = email;
+    if (name) room.knownNames[role] = name;
     if (accountEmail) room.knownAccounts[role] = accountEmail;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
@@ -342,6 +351,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     const seatToken = nanoid(21);
     const email = room.knownEmails[role]; // carry forward whatever notify preference this seat last had
     room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name: fallbackName };
+    if (fallbackName) room.knownNames[role] = fallbackName;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
@@ -574,6 +584,10 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       if (this.module.isRoomFinished?.(room.gameState)) continue;
       const mySeats = room.seatOrder.filter((seat) => room.knownAccounts?.[seat] === email);
       const activeSeat = this.module.getActiveSeat?.(room.gameState) ?? null;
+      const otherPlayerNames = room.seatOrder
+        .filter((seat) => !mySeats.includes(seat))
+        .map((seat) => room.knownNames?.[seat])
+        .filter((name): name is string => !!name);
       out.push({
         gameId: this.module.id,
         code: room.code,
@@ -583,6 +597,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
         lastActivityAt: room.lastActivityAt,
         createdAt: room.createdAt,
         cancelable: this.isCancelable(room.seatOrder, room.knownAccounts, mySeats),
+        otherPlayerNames,
       });
     }
     return out;
@@ -674,6 +689,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       seats,
       knownEmails: { ...room.knownEmails },
       knownAccounts: { ...room.knownAccounts },
+      knownNames: { ...room.knownNames },
       chatMessages: [...room.chatMessages],
       createdAt: room.createdAt,
       lastActivityAt: room.lastActivityAt,
