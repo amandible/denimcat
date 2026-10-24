@@ -77,6 +77,9 @@ export interface OpenGameSummary<TSeat extends string> {
   seatCount: number;
   isMyTurn: boolean;
   lastActivityAt: number;
+  createdAt: number;
+  /** True when no OTHER seat has ever been joined by a different account — see RoomStore.cancelRoom, which re-verifies this itself rather than trusting the caller. */
+  cancelable: boolean;
 }
 
 /**
@@ -578,9 +581,44 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
         seatCount: room.seatOrder.length,
         isMyTurn: activeSeat !== null && mySeats.includes(activeSeat),
         lastActivityAt: room.lastActivityAt,
+        createdAt: room.createdAt,
+        cancelable: this.isCancelable(room.seatOrder, room.knownAccounts, mySeats),
       });
     }
     return out;
+  }
+
+  /** True when no seat outside `mySeats` has ever been joined by a different account — see OpenGameSummary.cancelable and cancelRoom. */
+  private isCancelable(seatOrder: readonly TSeat[], knownAccounts: Partial<Record<TSeat, string>> | undefined, mySeats: TSeat[]): boolean {
+    return seatOrder.every((seat) => mySeats.includes(seat) || knownAccounts?.[seat] === undefined);
+  }
+
+  /**
+   * Deletes an abandoned room outright — offered client-side only when
+   * `listOpenRoomsForAccount` reported it `cancelable`, but re-verified
+   * here rather than trusted from the caller, since another account
+   * could have joined a seat between when that list was fetched and
+   * this call landing. Clears any pending reconnect-grace timers for
+   * this room's seats (same cleanup sweepIdleRooms already does) and
+   * tells any still-connected socket (e.g. this same account open in
+   * another tab) the room is gone, via the existing (currently unused
+   * elsewhere) room_closed event, before actually deleting.
+   */
+  async cancelRoom(code: string, accountEmail: string): Promise<ActionResult> {
+    const room = await this.getRoom(code);
+    if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
+    const mySeats = room.seatOrder.filter((seat) => room.knownAccounts[seat] === accountEmail);
+    if (mySeats.length === 0) {
+      return { ok: false, error: { code: 'NOT_YOUR_ROOM', message: 'You do not hold a seat in this room.' } };
+    }
+    if (!this.isCancelable(room.seatOrder, room.knownAccounts, mySeats)) {
+      return { ok: false, error: { code: 'NOT_CANCELABLE', message: 'Another player has joined this room.' } };
+    }
+    for (const seat of room.seatOrder) this.clearGraceTimer(code, seat);
+    this.nsp.to(code).emit('room_closed', { reason: 'cancelled' });
+    this.cache.delete(code);
+    await this.repository.delete(code);
+    return { ok: true };
   }
 
   /**

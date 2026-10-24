@@ -108,6 +108,14 @@ describe('GET /my-games', () => {
     }).then((r) => r.json());
   }
 
+  function cancelGame(sessionToken: string | undefined, gameId: unknown, code: unknown) {
+    return fetch(`${baseUrl}/my-games/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) },
+      body: JSON.stringify({ gameId, code }),
+    }).then((r) => r.json());
+  }
+
   it('lists an open room with the right isMyTurn for each seat-holder, and {ok:false} without a session', async () => {
     const aliceToken = await signIn('alice@example.com');
     const bobToken = await signIn('bob@example.com');
@@ -153,5 +161,37 @@ describe('GET /my-games', () => {
     await repository.save({ ...persisted, gameState: { ...persisted.gameState, phase: 'ended' } });
 
     expect(await myGames(aliceToken)).toEqual({ ok: true, games: [] });
+  });
+
+  it('exposes createdAt and cancelable, and POST /my-games/cancel deletes a solo room but refuses a joined one', async () => {
+    const aliceToken = await signIn('alice@example.com');
+    const bobToken = await signIn('bob@example.com');
+    const aliceSocket = await connect(aliceToken);
+
+    const soloRoom = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+    await emitAck(aliceSocket, 'join_room', { roomCode: soloRoom.roomCode, role: 'p1' });
+
+    const aliceGames = await myGames(aliceToken);
+    const soloEntry = aliceGames.games.find((g: any) => g.code === soloRoom.roomCode);
+    expect(soloEntry.cancelable).toBe(true);
+    expect(typeof soloEntry.createdAt).toBe('number');
+
+    // Missing/invalid session, and malformed payloads.
+    expect(await cancelGame(undefined, 'mint-condition', soloRoom.roomCode)).toMatchObject({ ok: false });
+    expect(await cancelGame(aliceToken, undefined, soloRoom.roomCode)).toMatchObject({ ok: false });
+
+    const cancelled = await cancelGame(aliceToken, 'mint-condition', soloRoom.roomCode);
+    expect(cancelled).toEqual({ ok: true });
+    expect((await myGames(aliceToken)).games).toHaveLength(0);
+
+    // A room someone else has joined can't be cancelled out from under them.
+    const sharedRoom = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+    await emitAck(aliceSocket, 'join_room', { roomCode: sharedRoom.roomCode, role: 'p1' });
+    const bobSocket = await connect(bobToken);
+    await emitAck(bobSocket, 'join_room', { roomCode: sharedRoom.roomCode, role: 'p2' });
+
+    const refused = await cancelGame(aliceToken, 'mint-condition', sharedRoom.roomCode);
+    expect(refused).toEqual({ ok: false, error: { code: 'NOT_CANCELABLE', message: expect.any(String) } });
+    expect((await myGames(aliceToken)).games.some((g: any) => g.code === sharedRoom.roomCode)).toBe(true);
   });
 });

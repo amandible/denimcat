@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GAMES } from '../games/registry';
 import { invalidateSession, loadSessionToken } from '../state/authToken';
-import { fetchMyGames, myGameUrl, type MyGame } from '../state/myGames';
+import { cancelMyGame, fetchMyGames, formatRelativeAge, myGameUrl, type MyGame } from '../state/myGames';
 import { SERVER_URL } from '../socket';
 
 async function handleSignOut() {
@@ -18,6 +18,17 @@ export function HomeView() {
   useEffect(() => {
     fetchMyGames().then(setMyGames);
   }, []);
+
+  async function handleCancel(game: MyGame) {
+    if (!window.confirm(`Cancel this ${game.displayName} game (room ${game.code})? This can't be undone.`)) return;
+    const ok = await cancelMyGame(game);
+    if (ok) {
+      setMyGames((prev) => prev.filter((g) => !(g.gameId === game.gameId && g.code === game.code)));
+    } else {
+      // Conditions changed since the list was fetched (e.g. someone just joined) — refetch to reflect reality.
+      fetchMyGames().then(setMyGames);
+    }
+  }
 
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
@@ -37,19 +48,28 @@ export function HomeView() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
             <h2 style={{ fontSize: 15, color: 'var(--muted)', margin: 0 }}>Your games</h2>
             {myGames.map((game) => (
-              <a
+              <div
                 key={`${game.gameId}-${game.code}`}
-                href={myGameUrl(game)}
                 className="panel"
-                style={{ textDecoration: 'none', color: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px' }}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '14px 18px' }}
               >
-                <span>
-                  {game.displayName} <span style={{ color: 'var(--muted)', fontSize: 13 }}>· room {game.code}</span>
-                </span>
-                <strong style={{ color: game.isMyTurn ? 'var(--accent)' : 'var(--muted)', fontSize: 13 }}>
-                  {game.isMyTurn ? 'Your turn' : 'Waiting'}
-                </strong>
-              </a>
+                <a href={myGameUrl(game)} style={{ textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}>
+                  <div>
+                    {game.displayName} <span style={{ color: 'var(--muted)', fontSize: 13 }}>· room {game.code}</span>
+                  </div>
+                  <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 2 }}>Created {formatRelativeAge(game.createdAt)}</div>
+                </a>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  <strong style={{ color: game.isMyTurn ? 'var(--accent)' : 'var(--muted)', fontSize: 13 }}>
+                    {game.isMyTurn ? 'Your turn' : 'Waiting'}
+                  </strong>
+                  {game.cancelable && (
+                    <button className="btn" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => handleCancel(game)}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}

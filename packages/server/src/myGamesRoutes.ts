@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import cors from 'cors';
-import type { AuthService, GameModule, RoomStore } from '@denimcat/platform';
+import { isNonEmptyString, type AuthService, type GameModule, type RoomStore } from '@denimcat/platform';
 
 export interface GameStoreEntry {
   module: GameModule<any, any, any>;
@@ -49,6 +49,8 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
           mySeatCount: summary.mySeats.length,
           isMyTurn: summary.isMyTurn,
           lastActivityAt: summary.lastActivityAt,
+          createdAt: summary.createdAt,
+          cancelable: summary.cancelable,
         }));
       }),
     );
@@ -59,6 +61,28 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
       .sort((a, b) => (a.isMyTurn === b.isMyTurn ? b.lastActivityAt - a.lastActivityAt : a.isMyTurn ? -1 : 1));
 
     res.json({ ok: true, games });
+  });
+
+  router.post('/cancel', async (req, res) => {
+    const token = bearerToken(req);
+    const gameId = req.body?.gameId;
+    const code = req.body?.code;
+    if (!token || !isNonEmptyString(gameId) || !isNonEmptyString(code)) {
+      res.json({ ok: false, error: { code: 'INVALID_PAYLOAD', message: 'Malformed request.' } });
+      return;
+    }
+    const session = await authService.checkSession(token);
+    if (!session) {
+      res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
+      return;
+    }
+    const entry = gameStores.find((g) => g.module.id === gameId);
+    if (!entry) {
+      res.json({ ok: false, error: { code: 'UNKNOWN_GAME', message: 'No such game.' } });
+      return;
+    }
+    const result = await entry.store.cancelRoom(code, session.email);
+    res.json(result);
   });
 
   return router;
