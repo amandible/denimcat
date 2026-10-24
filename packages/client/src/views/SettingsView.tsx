@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { SERVER_URL } from '../socket';
 import { loadAuthEmail, loadDisplayName, loadSessionToken, saveIdentity } from '../state/authToken';
+import { isTurnChimeEnabled, setTurnChimeEnabled } from '../state/chime';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -12,6 +13,7 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 export function SettingsView() {
   const [displayName, setDisplayName] = useState(loadDisplayName() ?? '');
   const [status, setStatus] = useState<SaveStatus>('idle');
+  const [turnChimeEnabled, setTurnChimeEnabledState] = useState(isTurnChimeEnabled());
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -65,6 +67,21 @@ export function SettingsView() {
           {status === 'saved' && <p style={{ color: 'var(--accent)' }}>Saved.</p>}
           {status === 'error' && <p style={{ color: 'crimson' }}>Couldn't save — try again.</p>}
         </form>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
+          <input
+            type="checkbox"
+            checked={turnChimeEnabled}
+            onChange={(e) => {
+              setTurnChimeEnabledState(e.target.checked);
+              setTurnChimeEnabled(e.target.checked);
+            }}
+          />
+          <span style={{ fontSize: 14 }}>Play a sound when it becomes my turn</span>
+        </label>
+        <p style={{ fontSize: 12, color: 'var(--muted)', margin: '4px 0 0 24px' }}>
+          Only while a game is open in a tab in this browser. Saved immediately — no need to hit Save.
+        </p>
       </div>
     </main>
   );
