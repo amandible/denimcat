@@ -80,8 +80,8 @@ export interface OpenGameSummary<TSeat extends string> {
   isMyTurn: boolean;
   lastActivityAt: number;
   createdAt: number;
-  /** True when no OTHER seat has ever been joined by a different account — see RoomStore.cancelRoom, which re-verifies this itself rather than trusting the caller. */
-  cancelable: boolean;
+  /** True when no OTHER seat has ever been joined by a different account — see RoomStore.abandonRoom, which re-verifies this itself rather than trusting the caller. */
+  abandonable: boolean;
   /** Display names of every OTHER seat that has ever supplied one (knownNames), in seat order — skips seats nobody's joined yet or that joined with no name given. */
   otherPlayerNames: string[];
 }
@@ -596,41 +596,44 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
         isMyTurn: activeSeat !== null && mySeats.includes(activeSeat),
         lastActivityAt: room.lastActivityAt,
         createdAt: room.createdAt,
-        cancelable: this.isCancelable(room.seatOrder, room.knownAccounts, mySeats),
+        abandonable: this.isAbandonable(room.seatOrder, room.knownAccounts, mySeats),
         otherPlayerNames,
       });
     }
     return out;
   }
 
-  /** True when no seat outside `mySeats` has ever been joined by a different account — see OpenGameSummary.cancelable and cancelRoom. */
-  private isCancelable(seatOrder: readonly TSeat[], knownAccounts: Partial<Record<TSeat, string>> | undefined, mySeats: TSeat[]): boolean {
+  /** True when no seat outside `mySeats` has ever been joined by a different account — see OpenGameSummary.abandonable and abandonRoom. */
+  private isAbandonable(seatOrder: readonly TSeat[], knownAccounts: Partial<Record<TSeat, string>> | undefined, mySeats: TSeat[]): boolean {
     return seatOrder.every((seat) => mySeats.includes(seat) || knownAccounts?.[seat] === undefined);
   }
 
   /**
    * Deletes an abandoned room outright — offered client-side only when
-   * `listOpenRoomsForAccount` reported it `cancelable`, but re-verified
+   * `listOpenRoomsForAccount` reported it `abandonable`, but re-verified
    * here rather than trusted from the caller, since another account
    * could have joined a seat between when that list was fetched and
    * this call landing. Clears any pending reconnect-grace timers for
    * this room's seats (same cleanup sweepIdleRooms already does) and
    * tells any still-connected socket (e.g. this same account open in
    * another tab) the room is gone, via the existing (currently unused
-   * elsewhere) room_closed event, before actually deleting.
+   * elsewhere) room_closed event, before actually deleting. Named
+   * "abandon" rather than "cancel" throughout this feature — a "Cancel"
+   * button next to a confirm dialog that itself has a Cancel option is
+   * confusing.
    */
-  async cancelRoom(code: string, accountEmail: string): Promise<ActionResult> {
+  async abandonRoom(code: string, accountEmail: string): Promise<ActionResult> {
     const room = await this.getRoom(code);
     if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
     const mySeats = room.seatOrder.filter((seat) => room.knownAccounts[seat] === accountEmail);
     if (mySeats.length === 0) {
       return { ok: false, error: { code: 'NOT_YOUR_ROOM', message: 'You do not hold a seat in this room.' } };
     }
-    if (!this.isCancelable(room.seatOrder, room.knownAccounts, mySeats)) {
-      return { ok: false, error: { code: 'NOT_CANCELABLE', message: 'Another player has joined this room.' } };
+    if (!this.isAbandonable(room.seatOrder, room.knownAccounts, mySeats)) {
+      return { ok: false, error: { code: 'NOT_ABANDONABLE', message: 'Another player has joined this room.' } };
     }
     for (const seat of room.seatOrder) this.clearGraceTimer(code, seat);
-    this.nsp.to(code).emit('room_closed', { reason: 'cancelled' });
+    this.nsp.to(code).emit('room_closed', { reason: 'abandoned' });
     this.cache.delete(code);
     await this.repository.delete(code);
     return { ok: true };

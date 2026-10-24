@@ -108,8 +108,8 @@ describe('GET /my-games', () => {
     }).then((r) => r.json());
   }
 
-  function cancelGame(sessionToken: string | undefined, gameId: unknown, code: unknown) {
-    return fetch(`${baseUrl}/my-games/cancel`, {
+  function abandonGame(sessionToken: string | undefined, gameId: unknown, code: unknown) {
+    return fetch(`${baseUrl}/my-games/abandon`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) },
       body: JSON.stringify({ gameId, code }),
@@ -163,7 +163,7 @@ describe('GET /my-games', () => {
     expect(await myGames(aliceToken)).toEqual({ ok: true, games: [] });
   });
 
-  it('exposes createdAt and cancelable, and POST /my-games/cancel deletes a solo room but refuses a joined one', async () => {
+  it('exposes createdAt and abandonable, and POST /my-games/abandon deletes a solo room but refuses a joined one', async () => {
     const aliceToken = await signIn('alice@example.com');
     const bobToken = await signIn('bob@example.com');
     const aliceSocket = await connect(aliceToken);
@@ -173,25 +173,25 @@ describe('GET /my-games', () => {
 
     const aliceGames = await myGames(aliceToken);
     const soloEntry = aliceGames.games.find((g: any) => g.code === soloRoom.roomCode);
-    expect(soloEntry.cancelable).toBe(true);
+    expect(soloEntry.abandonable).toBe(true);
     expect(typeof soloEntry.createdAt).toBe('number');
 
     // Missing/invalid session, and malformed payloads.
-    expect(await cancelGame(undefined, 'mint-condition', soloRoom.roomCode)).toMatchObject({ ok: false });
-    expect(await cancelGame(aliceToken, undefined, soloRoom.roomCode)).toMatchObject({ ok: false });
+    expect(await abandonGame(undefined, 'mint-condition', soloRoom.roomCode)).toMatchObject({ ok: false });
+    expect(await abandonGame(aliceToken, undefined, soloRoom.roomCode)).toMatchObject({ ok: false });
 
-    const cancelled = await cancelGame(aliceToken, 'mint-condition', soloRoom.roomCode);
-    expect(cancelled).toEqual({ ok: true });
+    const abandoned = await abandonGame(aliceToken, 'mint-condition', soloRoom.roomCode);
+    expect(abandoned).toEqual({ ok: true });
     expect((await myGames(aliceToken)).games).toHaveLength(0);
 
-    // A room someone else has joined can't be cancelled out from under them.
+    // A room someone else has joined can't be abandoned out from under them.
     const sharedRoom = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
     await emitAck(aliceSocket, 'join_room', { roomCode: sharedRoom.roomCode, role: 'p1' });
     const bobSocket = await connect(bobToken);
     await emitAck(bobSocket, 'join_room', { roomCode: sharedRoom.roomCode, role: 'p2' });
 
-    const refused = await cancelGame(aliceToken, 'mint-condition', sharedRoom.roomCode);
-    expect(refused).toEqual({ ok: false, error: { code: 'NOT_CANCELABLE', message: expect.any(String) } });
+    const refused = await abandonGame(aliceToken, 'mint-condition', sharedRoom.roomCode);
+    expect(refused).toEqual({ ok: false, error: { code: 'NOT_ABANDONABLE', message: expect.any(String) } });
     expect((await myGames(aliceToken)).games.some((g: any) => g.code === sharedRoom.roomCode)).toBe(true);
   });
 

@@ -678,8 +678,8 @@ describe('RoomStore.sendChatMessage', () => {
   });
 });
 
-describe('RoomStore.cancelRoom and OpenGameSummary.cancelable', () => {
-  it('a solo room (no other seat ever joined) is cancelable, and cancelling it deletes it', async () => {
+describe('RoomStore.abandonRoom and OpenGameSummary.abandonable', () => {
+  it('a solo room (no other seat ever joined) is abandonable, and abandoning it deletes it', async () => {
     const repo = new InMemoryRoomRepository<TestState, TestSeat>();
     const store = new RoomStore(makeModule(), repo, fakeNamespace());
     const created = await store.createRoom(undefined);
@@ -688,15 +688,15 @@ describe('RoomStore.cancelRoom and OpenGameSummary.cancelable', () => {
     await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
 
     const listed = await store.listOpenRoomsForAccount('alice@example.com');
-    expect(listed[0].cancelable).toBe(true);
+    expect(listed[0].abandonable).toBe(true);
 
-    const result = await store.cancelRoom(created.roomCode, 'alice@example.com');
+    const result = await store.abandonRoom(created.roomCode, 'alice@example.com');
     expect(result).toEqual({ ok: true });
     expect(await repo.get(created.roomCode)).toBeNull();
     store.stop();
   });
 
-  it('a hotseat-shaped room (one account holds every seat) is cancelable', async () => {
+  it('a hotseat-shaped room (one account holds every seat) is abandonable', async () => {
     const repo = new InMemoryRoomRepository<TestState, TestSeat>();
     const store = new RoomStore(makeModule(), repo, fakeNamespace());
     const created = await store.createRoom(undefined);
@@ -706,11 +706,11 @@ describe('RoomStore.cancelRoom and OpenGameSummary.cancelable', () => {
     await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'alice@example.com');
 
     const listed = await store.listOpenRoomsForAccount('alice@example.com');
-    expect(listed[0].cancelable).toBe(true);
+    expect(listed[0].abandonable).toBe(true);
     store.stop();
   });
 
-  it('is not cancelable once a different account has joined another seat, and cancelRoom refuses it', async () => {
+  it('is not abandonable once a different account has joined another seat, and abandonRoom refuses it', async () => {
     const repo = new InMemoryRoomRepository<TestState, TestSeat>();
     const store = new RoomStore(makeModule(), repo, fakeNamespace());
     const created = await store.createRoom(undefined);
@@ -720,15 +720,15 @@ describe('RoomStore.cancelRoom and OpenGameSummary.cancelable', () => {
     await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'bob@example.com');
 
     const listed = await store.listOpenRoomsForAccount('alice@example.com');
-    expect(listed[0].cancelable).toBe(false);
+    expect(listed[0].abandonable).toBe(false);
 
-    const result = await store.cancelRoom(created.roomCode, 'alice@example.com');
-    expect(result).toEqual({ ok: false, error: { code: 'NOT_CANCELABLE', message: expect.any(String) } });
+    const result = await store.abandonRoom(created.roomCode, 'alice@example.com');
+    expect(result).toEqual({ ok: false, error: { code: 'NOT_ABANDONABLE', message: expect.any(String) } });
     expect(await repo.get(created.roomCode)).not.toBeNull();
     store.stop();
   });
 
-  it('cancelRoom refuses an account that holds no seat in the room, and a nonexistent room', async () => {
+  it('abandonRoom refuses an account that holds no seat in the room, and a nonexistent room', async () => {
     const repo = new InMemoryRoomRepository<TestState, TestSeat>();
     const store = new RoomStore(makeModule(), repo, fakeNamespace());
     const created = await store.createRoom(undefined);
@@ -736,10 +736,10 @@ describe('RoomStore.cancelRoom and OpenGameSummary.cancelable', () => {
     if (!created.ok) return;
     await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
 
-    const notMine = await store.cancelRoom(created.roomCode, 'mallory@example.com');
+    const notMine = await store.abandonRoom(created.roomCode, 'mallory@example.com');
     expect(notMine).toEqual({ ok: false, error: { code: 'NOT_YOUR_ROOM', message: expect.any(String) } });
 
-    const notFound = await store.cancelRoom('NOPE', 'alice@example.com');
+    const notFound = await store.abandonRoom('NOPE', 'alice@example.com');
     expect(notFound).toEqual({ ok: false, error: { code: 'ROOM_NOT_FOUND', message: expect.any(String) } });
     store.stop();
   });

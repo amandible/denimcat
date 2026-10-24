@@ -11,8 +11,8 @@ export interface MyGame {
   isMyTurn: boolean;
   lastActivityAt: number;
   createdAt: number;
-  /** True when no other seat has ever been joined by a different account — safe to offer "cancel" for. */
-  cancelable: boolean;
+  /** True when no other seat has ever been joined by a different account — safe to offer "abandon" for. */
+  abandonable: boolean;
   /** Display names of every other player who has ever joined, in seat order — empty if nobody else has joined yet or nobody gave a name. */
   otherPlayerNames: string[];
 }
@@ -44,12 +44,12 @@ export function myGameUrl(game: MyGame): string {
   return isHotseat ? `${game.roomUrlPath}?hotseat=1&players=${game.seatCount}` : game.roomUrlPath;
 }
 
-/** Deletes an abandoned room outright — only meaningful when `MyGame.cancelable` is true; the server re-verifies that itself regardless. */
-export async function cancelMyGame(game: Pick<MyGame, 'gameId' | 'code'>): Promise<boolean> {
+/** Deletes an abandoned room outright — only meaningful when `MyGame.abandonable` is true; the server re-verifies that itself regardless. */
+export async function abandonMyGame(game: Pick<MyGame, 'gameId' | 'code'>): Promise<boolean> {
   const token = loadSessionToken();
   if (!token) return false;
   try {
-    const res = await fetch(`${SERVER_URL}/my-games/cancel`, {
+    const res = await fetch(`${SERVER_URL}/my-games/abandon`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ gameId: game.gameId, code: game.code }),

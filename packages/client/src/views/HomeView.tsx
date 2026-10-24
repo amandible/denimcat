@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GAMES } from '../games/registry';
 import { invalidateSession, loadSessionToken } from '../state/authToken';
-import { cancelMyGame, fetchMyGames, formatRelativeAge, myGameUrl, type MyGame } from '../state/myGames';
+import { abandonMyGame, fetchMyGames, formatRelativeAge, myGameUrl, type MyGame } from '../state/myGames';
 import { SERVER_URL } from '../socket';
 
 async function handleSignOut() {
@@ -19,9 +19,9 @@ export function HomeView() {
     fetchMyGames().then(setMyGames);
   }, []);
 
-  async function handleCancel(game: MyGame) {
-    if (!window.confirm(`Cancel this ${game.displayName} game (room ${game.code})? This can't be undone.`)) return;
-    const ok = await cancelMyGame(game);
+  async function handleAbandon(game: MyGame) {
+    if (!window.confirm(`Abandon this ${game.displayName} game (room ${game.code})? This can't be undone.`)) return;
+    const ok = await abandonMyGame(game);
     if (ok) {
       setMyGames((prev) => prev.filter((g) => !(g.gameId === game.gameId && g.code === game.code)));
     } else {
@@ -66,9 +66,9 @@ export function HomeView() {
                   <strong style={{ color: game.isMyTurn ? 'var(--accent)' : 'var(--muted)', fontSize: 13 }}>
                     {game.isMyTurn ? 'Your turn' : 'Waiting'}
                   </strong>
-                  {game.cancelable && (
-                    <button className="btn" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => handleCancel(game)}>
-                      Cancel
+                  {game.abandonable && (
+                    <button className="btn" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => handleAbandon(game)}>
+                      Abandon
                     </button>
                   )}
                 </div>

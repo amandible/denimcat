@@ -50,7 +50,7 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
           isMyTurn: summary.isMyTurn,
           lastActivityAt: summary.lastActivityAt,
           createdAt: summary.createdAt,
-          cancelable: summary.cancelable,
+          abandonable: summary.abandonable,
           otherPlayerNames: summary.otherPlayerNames,
         }));
       }),
@@ -62,7 +62,7 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
     res.json({ ok: true, games });
   });
 
-  router.post('/cancel', async (req, res) => {
+  router.post('/abandon', async (req, res) => {
     const token = bearerToken(req);
     const gameId = req.body?.gameId;
     const code = req.body?.code;
@@ -80,7 +80,7 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
       res.json({ ok: false, error: { code: 'UNKNOWN_GAME', message: 'No such game.' } });
       return;
     }
-    const result = await entry.store.cancelRoom(code, session.email);
+    const result = await entry.store.abandonRoom(code, session.email);
     res.json(result);
   });
 
