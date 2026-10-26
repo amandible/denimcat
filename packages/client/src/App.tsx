@@ -76,20 +76,31 @@ export function App() {
 
   // One-time check on load: is the stored session token (if any) still
   // valid? Handles revocation/expiry gracefully rather than trusting
-  // localStorage's mere presence.
+  // localStorage's mere presence. Timed out via AbortController rather than
+  // left to hang indefinitely — a slow/unresponsive server (e.g. mid-restart
+  // during a deploy) would otherwise leave `session` stuck on 'checking'
+  // forever, which renders as a blank page with no way out short of another
+  // reload.
   useEffect(() => {
     const token = loadSessionToken();
     if (!token) {
       setSession('signed-out');
       return;
     }
-    fetch(`${SERVER_URL}/auth/session`, { headers: { Authorization: `Bearer ${token}` } })
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    fetch(`${SERVER_URL}/auth/session`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
       .then((res) => res.json())
       .then((result: { ok: true; email: string; displayName: string | null; turnChimeEnabled: boolean } | { ok: false }) => {
         if (result.ok) saveIdentity(result.email, result.displayName, result.turnChimeEnabled);
         setSession(result.ok ? 'signed-in' : 'signed-out');
       })
-      .catch(() => setSession('signed-out'));
+      .catch(() => setSession('signed-out'))
+      .finally(() => clearTimeout(timeout));
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
   }, []);
 
   // A game socket's auth middleware rejected our session (expired/revoked
@@ -108,7 +119,13 @@ export function App() {
   // session-gate early-returns below.
   function renderRoute() {
     if (route.kind === 'auth-verify') return <VerifyView token={route.token} onVerified={handleVerified} />;
-    if (session === 'checking') return null;
+    if (session === 'checking') {
+      return (
+        <main style={{ maxWidth: 420, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
+          <p style={{ color: 'var(--muted)' }}>Loading…</p>
+        </main>
+      );
+    }
     if (session === 'signed-out') return <SignInGate />;
 
     if (route.kind === 'home') return <HomeView />;
