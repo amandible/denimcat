@@ -80,7 +80,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         {mySeat && isMyTurn && (
           <div style={{ marginTop: 16 }}>
             <button className="btn" onClick={() => connection.pass()} style={{ width: '100%', padding: 10 }}>
-              Pass (+2 gems)
+              Pass (+4 gems)
             </button>
           </div>
         )}

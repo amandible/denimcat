@@ -23,7 +23,7 @@ export function RulesContent() {
         available soon.
       </p>
       <p>
-        On each turn, a player may pass (gaining two gems) or buy one link card from the display. After
+        On each turn, a player may pass (gaining four gems) or buy one link card from the display. After
         paying the printed cost plus any modifiers, the player buying a card draws that card's link in their
         own color. The card that was below the purchased card moves up into its place, and a new card is
         drawn to fill the lower row. It is now the next player's turn.

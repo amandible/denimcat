@@ -3,12 +3,12 @@ import { buyLink, pass } from '../src/actions';
 import { makeState } from './helpers';
 
 describe('pass', () => {
-  it('gains two gems and advances the turn', () => {
+  it('gains four gems and advances the turn', () => {
     const state = makeState({ seats: ['p1', 'p2'], activeSeat: 'p1', players: { p1: { gems: 5 } } });
     const result = pass(state, 'p1');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.state.players.p1.gems).toBe(7);
+    expect(result.state.players.p1.gems).toBe(9);
     expect(result.state.activeSeat).toBe('p2');
   });
 

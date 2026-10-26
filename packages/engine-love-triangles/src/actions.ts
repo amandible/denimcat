@@ -13,15 +13,15 @@ function requireActiveSeat(state: GameState, seat: SeatId): EngineResult | null 
   return null;
 }
 
-/** Passing gains two gems and ends the turn; the display is untouched. */
+/** Passing gains four gems and ends the turn; the display is untouched. */
 export function pass(state: GameState, seat: SeatId): EngineResult {
   const rejection = requireActiveSeat(state, seat);
   if (rejection) return rejection;
 
   const next = cloneState(state);
-  next.players[seat].gems += 2;
+  next.players[seat].gems += 4;
   next.activeSeat = nextSeat(next.turnOrder, seat);
-  pushLog(next, `${seat} passed (+2 gems).`);
+  pushLog(next, `${seat} passed (+4 gems).`);
   return ok(next);
 }
 
