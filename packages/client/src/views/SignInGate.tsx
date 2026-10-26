@@ -38,7 +38,7 @@ export function SignInGate() {
           </p>
         ) : (
           <>
-            <p style={{ color: 'var(--muted)', marginTop: 0 }}>Enter your email and we'll send you a sign-in link.</p>
+            <p style={{ color: 'var(--muted)', marginTop: 0 }}>Enter your email address - you'll receive a sign-in link.</p>
             <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8 }}>
               <input
                 type="email"
