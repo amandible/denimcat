@@ -462,9 +462,15 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
 
     room.gameState = result.state;
     room.lastActivityAt = Date.now();
-    await this.persist(room);
     this.broadcastState(room, result.data);
     this.notifyTurn(room, previousState);
+    // notifyGameEnd mutates room.recapViewedBy directly — persist must run
+    // after it (and after notifyTurn, which mutates nothing but is fine
+    // either way), so that mutation is actually saved rather than living
+    // only in memory until some later action re-persists the room, which
+    // may never happen for a room that just finished.
+    this.notifyGameEnd(room, previousState);
+    await this.persist(room);
     return { ok: true };
   }
 
@@ -519,6 +525,49 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     this.emailSender
       .send(email, subject, text)
       .catch((error) => console.error(`[roomStore:${this.module.id}] turn notification failed:`, error));
+  }
+
+  /**
+   * Fires once, the instant a room transitions from not-finished to
+   * finished (comparing GameModule.isRoomFinished before vs. after, same
+   * diff-the-transition shape as notifyTurn above). Two things happen:
+   *
+   * 1. Every seat with a live, connected socket right now is marked as
+   *    having viewed the recap — anyone watching the game conclude live
+   *    has, by definition, already seen it. Everyone else (the real
+   *    async-play case this whole feature exists for) is left for the
+   *    join/reconnect backfill in joinRoom/reconnectRoom/reconnectByAccount
+   *    to mark on their next arrival instead.
+   * 2. Every seat with a knownEmails entry gets a "game over" email, same
+   *    fire-and-forget convention as notifyTurn.
+   */
+  private notifyGameEnd(room: LiveRoom<TState, TSeat>, previousState: TState): void {
+    if (!this.module.isRoomFinished) return;
+    if (this.module.isRoomFinished(previousState) || !this.module.isRoomFinished(room.gameState)) return;
+
+    for (const seat of room.seatOrder) {
+      const liveSeat = room.seats[seat];
+      const account = room.knownAccounts[seat];
+      if (liveSeat?.socketId && account) room.recapViewedBy[account] = true;
+    }
+
+    for (const seat of room.seatOrder) {
+      const email = room.knownEmails[seat];
+      if (!email) continue;
+      const subject = `Game over in ${this.module.displayName} — see how it ended`;
+      const path = this.module.roomUrlPath?.(room.code);
+      const seatToken = room.seats[seat]?.seatToken;
+      const link =
+        this.appBaseUrl && path
+          ? `${this.appBaseUrl}${path}${seatToken ? `?seat=${encodeURIComponent(seat)}&token=${encodeURIComponent(seatToken)}` : ''}`
+          : null;
+      const text = link
+        ? `Game over in ${this.module.displayName} — room ${room.code}. See how it ended:\n\n${link}`
+        : `Game over in ${this.module.displayName} — room ${room.code}.`;
+      this.emailSender
+        .send(email, subject, text)
+        .catch((error) => console.error(`[roomStore:${this.module.id}] game-end notification failed:`, error));
+    }
   }
 
   private viewFor(room: LiveRoom<TState, TSeat>, viewer: TSeat | 'spectator'): unknown {

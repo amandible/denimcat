@@ -466,6 +466,83 @@ describe('RoomStore async-play turn notifications', () => {
   );
 });
 
+describe('RoomStore.notifyGameEnd', () => {
+  it('emails every seat with a knownEmails entry once the room becomes finished', async () => {
+    const sender = fakeEmailSender();
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace(), { emailSender: sender });
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', 'p1@example.com');
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', 'p2@example.com');
+
+    const result = await store.applyAction(created.roomCode, 'socket-1', () => ok<ListState>({ turn: null, finished: true }));
+    expect(result.ok).toBe(true);
+
+    expect(sender.calls).toHaveLength(2);
+    expect(sender.calls.map((c) => c.to).sort()).toEqual(['p1@example.com', 'p2@example.com']);
+    expect(sender.calls[0].subject).toContain('List Game');
+    store.stop();
+  });
+
+  it('does not email again on a later action once already finished', async () => {
+    const sender = fakeEmailSender();
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace(), { emailSender: sender });
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', 'p1@example.com');
+    await store.applyAction(created.roomCode, 'socket-1', () => ok<ListState>({ turn: null, finished: true }));
+    expect(sender.calls).toHaveLength(1);
+
+    await store.applyAction(created.roomCode, 'socket-1', () => ok<ListState>({ turn: null, finished: true })); // another action, still finished
+    expect(sender.calls).toHaveLength(1); // no new email — was already finished before this action too
+
+    store.stop();
+  });
+
+  it('marks recapViewedBy true for every account with a currently-connected socket at the moment the game ends', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'bob@example.com');
+
+    await store.applyAction(created.roomCode, 'socket-1', () => ok<ListState>({ turn: null, finished: true }));
+
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.recapViewedBy['alice@example.com']).toBe(true);
+    expect(room?.recapViewedBy['bob@example.com']).toBe(true);
+    store.stop();
+  });
+
+  it('does NOT mark recapViewedBy for an account with no live connection at that moment', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'bob@example.com');
+    await store.handleDisconnect('socket-2'); // bob goes offline before the game ends
+
+    await store.applyAction(created.roomCode, 'socket-1', () => ok<ListState>({ turn: null, finished: true }));
+
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.recapViewedBy['alice@example.com']).toBe(true); // still connected
+    expect(room?.recapViewedBy['bob@example.com']).toBeUndefined(); // offline — left for the join/reconnect backfill instead
+    store.stop();
+  });
+});
+
 describe('RoomStore idle-room sweep — tiered timeout based on known emails', () => {
   async function seedEmptyRoom(
     code: string,
