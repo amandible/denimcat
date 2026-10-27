@@ -8,6 +8,7 @@ import { DiscardList } from './components/DiscardList';
 import { RulesContent } from './components/RulesContent';
 import { RulesModal } from '../../components/RulesModal';
 import { ActivityPanel } from '../../components/ActivityPanel';
+import { RecapPanel } from '../../components/RecapPanel';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: LoveTrianglesConnection }) {
@@ -85,34 +86,42 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           </div>
         )}
 
-        {gameState.phase === 'ended' && gameState.winner && (
-          <div className="panel" style={{ marginTop: 16, background: 'var(--bg)' }}>
-            <h3 style={{ marginTop: 0 }}>Game over</h3>
-            <p>
-              {gameState.winner.length > 1 ? 'Shared victory: ' : 'Winner: '}
-              {gameState.winner.map(seatLabel).join(', ')}
-            </p>
-            {(() => {
-              const breakdowns = computeScoreBreakdowns(gameState);
-              const bySeat = [...gameState.seats].sort((a, b) => breakdowns[b].total - breakdowns[a].total);
-              return (
-                <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
-                  {bySeat.map((seat) => {
-                    const { loopSize, reachable, total } = breakdowns[seat];
-                    const isWinner = gameState.winner!.includes(seat);
+        {gameState.phase === 'ended' && gameState.winner && mySeat && (
+          <div style={{ marginTop: 16 }}>
+            <RecapPanel
+              gameId="love-triangles"
+              roomCode={roomCode}
+              mySeat={mySeat}
+              resultSummary={
+                <>
+                  <p style={{ margin: 0 }}>
+                    {gameState.winner.length > 1 ? 'Shared victory: ' : 'Winner: '}
+                    {gameState.winner.map(seatLabel).join(', ')}
+                  </p>
+                  {(() => {
+                    const breakdowns = computeScoreBreakdowns(gameState);
+                    const bySeat = [...gameState.seats].sort((a, b) => breakdowns[b].total - breakdowns[a].total);
                     return (
-                      <li key={seat} style={{ padding: '4px 0', fontWeight: isWinner ? 'bold' : 'normal' }}>
-                        {seatLabel(seat)}: {total} pts
-                        <span style={{ color: 'var(--muted)', fontWeight: 'normal' }}>
-                          {' '}
-                          ({loopSize}-node loop{reachable > 0 ? ` + ${reachable} reachable` : ''})
-                        </span>
-                      </li>
+                      <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
+                        {bySeat.map((seat) => {
+                          const { loopSize, reachable, total } = breakdowns[seat];
+                          const isWinner = gameState.winner!.includes(seat);
+                          return (
+                            <li key={seat} style={{ padding: '4px 0', fontWeight: isWinner ? 'bold' : 'normal' }}>
+                              {seatLabel(seat)}: {total} pts
+                              <span style={{ color: 'var(--muted)', fontWeight: 'normal' }}>
+                                {' '}
+                                ({loopSize}-node loop{reachable > 0 ? ` + ${reachable} reachable` : ''})
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     );
-                  })}
-                </ul>
-              );
-            })()}
+                  })()}
+                </>
+              }
+            />
           </div>
         )}
 

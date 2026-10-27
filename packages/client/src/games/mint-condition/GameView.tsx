@@ -13,6 +13,7 @@ import { PlayerCounts } from './components/PlayerCounts';
 import { RulesContent } from './components/RulesContent';
 import { RulesModal } from '../../components/RulesModal';
 import { ActivityPanel } from '../../components/ActivityPanel';
+import { RecapPanel } from '../../components/RecapPanel';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: MintConditionConnection }) {
@@ -131,6 +132,23 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         <div style={{ marginTop: 16 }}>
           <ScoreBoard state={gameState} />
         </div>
+
+        {gameState.phase === 'ended' && mySeat && (
+          <div style={{ marginTop: 16 }}>
+            <RecapPanel
+              gameId="mint-condition"
+              roomCode={roomCode}
+              mySeat={mySeat}
+              resultSummary={
+                <p style={{ margin: 0 }}>
+                  {gameState.winner && gameState.winner.length > 1
+                    ? `Shared win: ${gameState.winner.map(seatLabel).join(' & ')}!`
+                    : `${gameState.winner ? seatLabel(gameState.winner[0]) : ''} wins!`}
+                </p>
+              }
+            />
+          </div>
+        )}
 
         <div style={{ marginTop: 16 }}>
           <ActivityPanel
