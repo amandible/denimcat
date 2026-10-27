@@ -129,9 +129,21 @@ describe('auth HTTP routes', () => {
     const token = linkFromSender('alice@example.com');
     const { sessionToken } = await verify(token);
 
-    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: null, turnChimeEnabled: true });
+    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: null, turnChimeEnabled: true, isOwner: false });
     expect(await session()).toEqual({ ok: false });
     expect(await session('garbage')).toEqual({ ok: false });
+  });
+
+  it('isOwner is true for the configured OWNER_EMAIL and false for anyone else, on both /auth/verify and /auth/session', async () => {
+    await requestLink('owner@example.com');
+    const ownerVerify = await verify(linkFromSender('owner@example.com'));
+    expect(ownerVerify.isOwner).toBe(true);
+    expect(await session(ownerVerify.sessionToken)).toMatchObject({ isOwner: true });
+
+    await requestLink('alice@example.com');
+    const aliceVerify = await verify(linkFromSender('alice@example.com'));
+    expect(aliceVerify.isOwner).toBe(false);
+    expect(await session(aliceVerify.sessionToken)).toMatchObject({ isOwner: false });
   });
 
   it('sign-out then session confirms the session is gone', async () => {
@@ -149,7 +161,7 @@ describe('auth HTTP routes', () => {
     const { sessionToken } = await verify(token);
 
     expect(await updateProfile(sessionToken, 'Alice')).toEqual({ ok: true, displayName: 'Alice', turnChimeEnabled: true });
-    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: 'Alice', turnChimeEnabled: true });
+    expect(await session(sessionToken)).toEqual({ ok: true, email: 'alice@example.com', displayName: 'Alice', turnChimeEnabled: true, isOwner: false });
   });
 
   it('trims a display name and caps it at 40 characters', async () => {

@@ -10,13 +10,20 @@ const MAX_LINKS_PER_HOUR = 5;
 /** Just enough to catch a typo or empty string — not full RFC validation, which would reject plenty of real addresses this project will never see. */
 const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** This app's first access-control boundary (gates the owner-only playtest-notes view) — everything else so far is "is this your own data." Case-insensitive, matching how every email in this file is normalized to lowercase before storage. */
+function isOwnerEmail(email: string, ownerEmail: string | undefined): boolean {
+  return ownerEmail !== undefined && email.toLowerCase() === ownerEmail.toLowerCase();
+}
+
 export interface AuthService {
   /** Always resolves, regardless of whether a link was actually sent (malformed address, rate-limited) — nothing for a caller to branch on, so there's nothing to leak. */
   requestLink(email: string): Promise<void>;
   verifyToken(
     token: string,
-  ): Promise<{ sessionToken: string; expiresAt: number; email: string; displayName: string | null; turnChimeEnabled: boolean } | null>;
-  checkSession(token: string): Promise<{ email: string; displayName: string | null; turnChimeEnabled: boolean } | null>;
+  ): Promise<
+    { sessionToken: string; expiresAt: number; email: string; displayName: string | null; turnChimeEnabled: boolean; isOwner: boolean } | null
+  >;
+  checkSession(token: string): Promise<{ email: string; displayName: string | null; turnChimeEnabled: boolean; isOwner: boolean } | null>;
   signOut(token: string): Promise<void>;
   /**
    * Saves every Settings-page preference in one request — deliberately
@@ -79,7 +86,7 @@ export function createAuthService(
       await repo.createSession(consumed.email, sessionToken, expiresAt);
       const displayName = await repo.getDisplayName(consumed.email);
       const turnChimeEnabled = await repo.getTurnChimeEnabled(consumed.email);
-      return { sessionToken, expiresAt, email: consumed.email, displayName, turnChimeEnabled };
+      return { sessionToken, expiresAt, email: consumed.email, displayName, turnChimeEnabled, isOwner: isOwnerEmail(consumed.email, ownerEmail) };
     },
 
     async checkSession(token: string) {
@@ -87,7 +94,7 @@ export function createAuthService(
       if (!session) return null;
       const displayName = await repo.getDisplayName(session.email);
       const turnChimeEnabled = await repo.getTurnChimeEnabled(session.email);
-      return { email: session.email, displayName, turnChimeEnabled };
+      return { email: session.email, displayName, turnChimeEnabled, isOwner: isOwnerEmail(session.email, ownerEmail) };
     },
 
     async signOut(token: string): Promise<void> {
