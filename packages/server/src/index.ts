@@ -21,6 +21,7 @@ import {
   createDefaultAuthRepository,
   createDefaultEmailSender,
   createDefaultRoomRepository,
+  createDefaultSurveyRepository,
   ensureSchema,
   type RoomStoreOptions,
 } from '@denimcat/platform';
@@ -60,8 +61,9 @@ async function main() {
   // land before httpServer.listen() below, by which point every game has
   // been pushed.
   const gameStores: GameStoreEntry[] = [];
+  const surveyRepository = createDefaultSurveyRepository();
 
-  const app = createApp({ authService, clientOrigins, gameStores });
+  const app = createApp({ authService, clientOrigins, gameStores, surveyRepository });
   const httpServer = createServer(app);
   // Untyped at the top level deliberately: this one Server hosts multiple
   // games, each with its own event contract on its own namespace (typed

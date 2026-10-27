@@ -16,6 +16,7 @@
     "@denimcat/engine-mint-condition": "*",
     "@denimcat/engine-love-triangles": "*",
     "@denimcat/platform": "*",
+    "@denimcat/shared": "*",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "socket.io": "^4.8.1",
