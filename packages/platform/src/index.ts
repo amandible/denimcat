@@ -19,6 +19,13 @@ export {
   createDefaultAuthRepository,
 } from './auth/authRepository';
 export { type AuthService, createAuthService } from './auth/authService';
+export {
+  type SurveyResponse,
+  type SurveyRepository,
+  InMemorySurveyRepository,
+  PostgresSurveyRepository,
+  createDefaultSurveyRepository,
+} from './surveys/surveyRepository';
 export { isNonEmptyString } from './socket/validate';
 export { registerRoomHandlers } from './socket/roomHandlers';
 export { attachSocketHandlers } from './socket/attach';

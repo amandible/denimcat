@@ -67,4 +67,23 @@ export async function ensureSchema(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+  // Independent of `rooms` — a response must outlive its room being
+  // deleted and support "every answer ever given for this game" across
+  // rooms, which a per-room JSONB blob can't (see surveys/surveyRepository.ts's
+  // own doc comment). room_id, not room_code, is the uniqueness/identity
+  // key — room codes get reused once a room is deleted.
+  await db`
+    CREATE TABLE IF NOT EXISTS survey_responses (
+      id SERIAL PRIMARY KEY,
+      game_id TEXT NOT NULL,
+      room_id TEXT NOT NULL,
+      room_code TEXT NOT NULL,
+      seat TEXT NOT NULL,
+      account_email TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (room_id, seat, question_id)
+    )
+  `;
 }
