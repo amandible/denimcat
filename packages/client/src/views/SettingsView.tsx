@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { SERVER_URL } from '../socket';
-import { loadAuthEmail, loadDisplayName, loadSessionToken, loadTurnChimeEnabled, saveIdentity } from '../state/authToken';
+import { loadAuthEmail, loadDisplayName, loadIsOwner, loadSessionToken, loadTurnChimeEnabled, saveIdentity } from '../state/authToken';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -34,7 +34,8 @@ export function SettingsView() {
         setDisplayName(result.displayName);
         setTurnChimeEnabled(result.turnChimeEnabled);
         const email = loadAuthEmail();
-        if (email) saveIdentity(email, result.displayName, result.turnChimeEnabled);
+        // Saving the profile form never changes ownership — carry the cached value through unchanged.
+        if (email) saveIdentity(email, result.displayName, result.turnChimeEnabled, loadIsOwner());
         setStatus('saved');
       })
       .catch(() => setStatus('error'));

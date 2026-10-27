@@ -91,8 +91,8 @@ export function App() {
     const timeout = setTimeout(() => controller.abort(), 8000);
     fetch(`${SERVER_URL}/auth/session`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
       .then((res) => res.json())
-      .then((result: { ok: true; email: string; displayName: string | null; turnChimeEnabled: boolean } | { ok: false }) => {
-        if (result.ok) saveIdentity(result.email, result.displayName, result.turnChimeEnabled);
+      .then((result: { ok: true; email: string; displayName: string | null; turnChimeEnabled: boolean; isOwner: boolean } | { ok: false }) => {
+        if (result.ok) saveIdentity(result.email, result.displayName, result.turnChimeEnabled, result.isOwner);
         setSession(result.ok ? 'signed-in' : 'signed-out');
       })
       .catch(() => setSession('signed-out'))

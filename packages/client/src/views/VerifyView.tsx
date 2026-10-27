@@ -4,7 +4,7 @@ import { saveIdentity, saveSessionToken } from '../state/authToken';
 
 type VerifyStatus = 'verifying' | 'invalid';
 type VerifyResult =
-  | { ok: true; sessionToken: string; email: string; displayName: string | null; turnChimeEnabled: boolean }
+  | { ok: true; sessionToken: string; email: string; displayName: string | null; turnChimeEnabled: boolean; isOwner: boolean }
   | { ok: false };
 
 /**
@@ -35,7 +35,7 @@ export function VerifyView({ token, onVerified }: { token: string; onVerified: (
       .then((result: VerifyResult) => {
         if (result.ok) {
           saveSessionToken(result.sessionToken);
-          saveIdentity(result.email, result.displayName, result.turnChimeEnabled);
+          saveIdentity(result.email, result.displayName, result.turnChimeEnabled, result.isOwner);
           onVerified();
         } else {
           setStatus('invalid');

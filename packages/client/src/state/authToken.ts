@@ -2,6 +2,7 @@ const KEY = 'denimcat:auth:session';
 const EMAIL_KEY = 'denimcat:auth:email';
 const DISPLAY_NAME_KEY = 'denimcat:auth:displayName';
 const TURN_CHIME_ENABLED_KEY = 'denimcat:auth:turnChimeEnabled';
+const IS_OWNER_KEY = 'denimcat:auth:isOwner';
 
 export function loadSessionToken(): string | null {
   try {
@@ -53,12 +54,22 @@ export function loadTurnChimeEnabled(): boolean {
   }
 }
 
-export function saveIdentity(email: string, displayName: string | null, turnChimeEnabled: boolean): void {
+/** Account-level (not per-browser) — gates the owner-only "Playtest notes" link. Pure UI convenience: the server independently enforces this on every owner-only route regardless of what this cache says. Defaults to false. */
+export function loadIsOwner(): boolean {
+  try {
+    return localStorage.getItem(IS_OWNER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function saveIdentity(email: string, displayName: string | null, turnChimeEnabled: boolean, isOwner: boolean): void {
   try {
     localStorage.setItem(EMAIL_KEY, email);
     if (displayName) localStorage.setItem(DISPLAY_NAME_KEY, displayName);
     else localStorage.removeItem(DISPLAY_NAME_KEY);
     localStorage.setItem(TURN_CHIME_ENABLED_KEY, turnChimeEnabled ? '1' : '0');
+    localStorage.setItem(IS_OWNER_KEY, isOwner ? '1' : '0');
   } catch {
     // ignore — same fallback as the session token above
   }
@@ -69,6 +80,7 @@ function clearIdentity(): void {
     localStorage.removeItem(EMAIL_KEY);
     localStorage.removeItem(DISPLAY_NAME_KEY);
     localStorage.removeItem(TURN_CHIME_ENABLED_KEY);
+    localStorage.removeItem(IS_OWNER_KEY);
   } catch {
     // ignore
   }
