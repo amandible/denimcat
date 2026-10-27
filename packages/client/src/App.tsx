@@ -3,6 +3,7 @@ import { HomeView } from './views/HomeView';
 import { SignInGate } from './views/SignInGate';
 import { VerifyView } from './views/VerifyView';
 import { SettingsView } from './views/SettingsView';
+import { NotesView } from './views/NotesView';
 import { HyperBloomHomeView } from '../../../private-games/other-games/client-hyperbloom/HomeView';
 import { MintConditionHomeView } from './games/mint-condition/HomeView';
 import { LoveTrianglesHomeView } from './games/love-triangles/HomeView';
@@ -23,6 +24,7 @@ type Route =
   | { kind: 'home' }
   | { kind: 'game-home'; slug: Slug }
   | { kind: 'room'; slug: Slug; roomCode: string }
+  | { kind: 'game-notes'; slug: Slug }
   | { kind: 'auth-verify'; token: string }
   | { kind: 'settings' };
 
@@ -31,6 +33,10 @@ function parseRoute(): Route {
   const roomMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/room\/([A-Za-z0-9]{4})$/);
   if (roomMatch) {
     return { kind: 'room', slug: roomMatch[1] as Slug, roomCode: roomMatch[2].toUpperCase() };
+  }
+  const notesMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/notes$/);
+  if (notesMatch) {
+    return { kind: 'game-notes', slug: notesMatch[1] as Slug };
   }
   const gameMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/?$/);
   if (gameMatch) {
@@ -133,6 +139,9 @@ export function App() {
     if (route.kind === 'game-home') {
       const GameHome = HOME_VIEWS[route.slug];
       return <GameHome />;
+    }
+    if (route.kind === 'game-notes') {
+      return <NotesView gameId={route.slug} />;
     }
     const Room = ROOM_VIEWS[route.slug];
     return <Room roomCode={route.roomCode} />;

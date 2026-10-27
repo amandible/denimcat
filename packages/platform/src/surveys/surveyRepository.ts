@@ -1,23 +1,7 @@
+import type { SurveyResponse } from '@denimcat/shared';
 import { getDb } from '../db/client';
 
-/**
- * One answer to one standard question, from one seat, in one room.
- * Independent of the room's own lifecycle (see roomId's doc comment on
- * PersistedRoom) — a response must survive its room being deleted, so
- * there's deliberately no foreign key back to `rooms`.
- */
-export interface SurveyResponse {
-  gameId: string;
-  /** The room's durable identity — see PersistedRoom.roomId. Never the recyclable 4-character room code. */
-  roomId: string;
-  /** Kept for display only (e.g. "the Tuesday game") — never used for uniqueness or lookups, since it can be reused after deletion. */
-  roomCode: string;
-  seat: string;
-  accountEmail: string;
-  questionId: string;
-  answer: string;
-  createdAt: number;
-}
+export type { SurveyResponse };
 
 export interface SurveyRepository {
   /** Idempotent on (roomId, seat, questionId) — a duplicate submit (e.g. a network retry) is a silent no-op, never an error or a second row. */

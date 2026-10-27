@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { PlayerCount } from '@denimcat/engine-mint-condition';
 import { createSocket } from '../../socket';
-import { loadSessionToken } from '../../state/authToken';
+import { loadIsOwner, loadSessionToken } from '../../state/authToken';
 import '../../styles/mint-condition.css';
 
 function goToRoom(code: string, hotseat?: boolean, playerCount?: PlayerCount) {
@@ -44,6 +44,11 @@ export function MintConditionHomeView() {
       <div className="panel" style={{ width: '100%' }}>
         <h1 style={{ fontSize: 28 }}>Mint Condition</h1>
         <p style={{ color: 'var(--muted)', marginTop: 0 }}>A 2-4 player auction designed by Alison Mandible (in development).</p>
+        {loadIsOwner() && (
+          <p style={{ fontSize: 13, marginTop: -8 }}>
+            <a href="/mint-condition/notes">Playtest notes</a>
+          </p>
+        )}
 
         <p style={{ fontSize: 14, marginBottom: 6 }}>Players</p>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>

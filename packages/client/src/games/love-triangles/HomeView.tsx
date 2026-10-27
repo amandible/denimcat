@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { PlayerCount } from '@denimcat/engine-love-triangles';
 import { createSocket } from '../../socket';
-import { loadSessionToken } from '../../state/authToken';
+import { loadIsOwner, loadSessionToken } from '../../state/authToken';
 import '../../styles/love-triangles.css';
 
 function goToRoom(code: string, hotseat?: boolean, playerCount?: PlayerCount) {
@@ -44,6 +44,11 @@ export function LoveTrianglesHomeView() {
       <div className="panel" style={{ width: '100%' }}>
         <h1 style={{ fontSize: 28 }}>Love Triangles</h1>
         <p style={{ color: 'var(--muted)', marginTop: 0 }}>TODO: Love Triangles description</p>
+        {loadIsOwner() && (
+          <p style={{ fontSize: 13, marginTop: -8 }}>
+            <a href="/love-triangles/notes">Playtest notes</a>
+          </p>
+        )}
 
         <p style={{ fontSize: 14, marginBottom: 6 }}>Players</p>
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
