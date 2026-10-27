@@ -33,6 +33,8 @@ interface LiveSeat {
 
 interface LiveRoom<TState, TSeat extends string> {
   code: string;
+  /** Durable identity, independent of `code` — see PersistedRoom.roomId's doc comment. Always populated once live, unlike the persisted shape's optional field. */
+  roomId: string;
   gameState: TState;
   seatOrder: readonly TSeat[];
   seats: Partial<Record<TSeat, LiveSeat>>;
@@ -44,6 +46,8 @@ interface LiveRoom<TState, TSeat extends string> {
   knownNames: Partial<Record<TSeat, string>>;
   /** See PersistedRoom.chatMessages's doc comment. */
   chatMessages: ChatMessage[];
+  /** See PersistedRoom.recapViewedBy's doc comment — keyed by account email, not seat. */
+  recapViewedBy: Record<string, true>;
   spectatorSocketIds: Set<string>;
   createdAt: number;
   lastActivityAt: number;
@@ -77,10 +81,17 @@ export interface OpenGameSummary<TSeat extends string> {
   mySeats: TSeat[];
   /** room.seatOrder.length — lets the caller detect "I hold every seat" (hotseat) without re-deriving it. */
   seatCount: number;
-  isMyTurn: boolean;
+  /**
+   * 'your-turn': the game isn't finished and it's one of mySeats' turn.
+   * 'waiting': the game isn't finished and it isn't my turn.
+   * 'recap': the game has finished and I haven't viewed it yet (see
+   * PersistedRoom.recapViewedBy) — once viewed, the room drops off the
+   * list entirely rather than reporting a fourth status.
+   */
+  status: 'your-turn' | 'waiting' | 'recap';
   lastActivityAt: number;
   createdAt: number;
-  /** True when no OTHER seat has ever been joined by a different account — see RoomStore.abandonRoom, which re-verifies this itself rather than trusting the caller. */
+  /** True when no OTHER seat has ever been joined by a different account — see RoomStore.abandonRoom, which re-verifies this itself rather than trusting the caller. False once the game has finished: an ended game isn't "abandoned," it's over. */
   abandonable: boolean;
   /** Display names of every OTHER seat that has ever supplied one (knownNames), in seat order — skips seats nobody's joined yet or that joined with no name given. */
   otherPlayerNames: string[];
@@ -154,6 +165,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     const seatOrder = this.module.seatsForConfig(config);
     const room: LiveRoom<TState, TSeat> = {
       code,
+      roomId: nanoid(),
       gameState: this.module.createInitialState(config),
       seatOrder,
       seats: {},
@@ -161,6 +173,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       knownAccounts: {},
       knownNames: {},
       chatMessages: [],
+      recapViewedBy: {},
       spectatorSocketIds: new Set(),
       createdAt: now,
       lastActivityAt: now,
@@ -205,6 +218,10 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
 
     const hydrated: LiveRoom<TState, TSeat> = {
       code: persisted.code,
+      // A room persisted before this field existed never had the chance to
+      // collect a survey_responses row keyed by it yet, so minting a fresh
+      // one on first load is harmless — see PersistedRoom.roomId's doc comment.
+      roomId: persisted.roomId ?? nanoid(),
       gameState: persisted.gameState,
       seatOrder: persisted.seatOrder,
       seats,
@@ -212,6 +229,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       knownAccounts,
       knownNames,
       chatMessages: persisted.chatMessages ?? [],
+      recapViewedBy: { ...persisted.recapViewedBy },
       spectatorSocketIds: new Set(),
       createdAt: persisted.createdAt,
       lastActivityAt: persisted.lastActivityAt,
@@ -264,6 +282,11 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     if (email) room.knownEmails[role] = email;
     if (name) room.knownNames[role] = name;
     if (accountEmail) room.knownAccounts[role] = accountEmail;
+    // An account arriving into an already-finished room has, by definition,
+    // just seen it — see PersistedRoom.recapViewedBy's doc comment. Rare in
+    // practice for a fresh join (seats are normally all filled before a
+    // game ends), but harmless and correct if it happens.
+    if (accountEmail && this.module.isRoomFinished?.(room.gameState)) room.recapViewedBy[accountEmail] = true;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
@@ -298,6 +321,9 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     // seat's stored token and silently reassign ownership away from the
     // account that actually holds it.
     if (accountEmail && !room.knownAccounts[role]) room.knownAccounts[role] = accountEmail;
+    // See joinRoom's identical comment — this account has just seen the
+    // room's current state, which is "finished" here.
+    if (accountEmail && this.module.isRoomFinished?.(room.gameState)) room.recapViewedBy[accountEmail] = true;
     this.socketBindings.set(socketId, { code, role });
     room.lastActivityAt = Date.now();
     await this.persist(room);
@@ -334,6 +360,11 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     if (!role) {
       return { ok: false, error: { code: 'NO_OWNED_SEAT', message: 'No seat in this room is associated with your account.' } };
     }
+
+    // See joinRoom's identical comment — this account has just seen the
+    // room's current state, which is "finished" here. Applies to both
+    // branches below (live takeover and fresh-rejoin alike).
+    if (this.module.isRoomFinished?.(room.gameState)) room.recapViewedBy[accountEmail] = true;
 
     const existing = room.seats[role];
     if (existing) {
@@ -569,34 +600,43 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   }
 
   /**
-   * Every one of this game's currently-open (not GameModule.isRoomFinished)
-   * rooms where `email` holds a seat — feeds the landing page's "your
-   * games" list (see GET /my-games). `mySeats` is every seat this account
-   * holds, which for a hotseat room (every seat joined from the same
+   * Every one of this game's rooms where `email` holds a seat, EXCEPT a
+   * finished room this account has already viewed the recap of (see
+   * PersistedRoom.recapViewedBy) — feeds the landing page's "your games"
+   * list (see GET /my-games). `mySeats` is every seat this account holds,
+   * which for a hotseat room (every seat joined from the same
    * authenticated browser) is the full seat list — that's what lets
-   * `isMyTurn` read as "always true" for hotseat with no special-casing:
-   * whenever any seat is active, it's necessarily one of `mySeats`.
+   * 'your-turn' read as "always true" for hotseat with no special-casing:
+   * whenever any seat is active, it's necessarily one of `mySeats`. The
+   * "viewed" check is account-level, not per-seat, for the same reason —
+   * one visit from a hotseat player clears the whole room at once.
    */
   async listOpenRoomsForAccount(email: string): Promise<OpenGameSummary<TSeat>[]> {
     const rooms = await this.repository.findByAccountEmail(this.module.id, email);
     const out: OpenGameSummary<TSeat>[] = [];
     for (const room of rooms) {
-      if (this.module.isRoomFinished?.(room.gameState)) continue;
+      const isFinished = this.module.isRoomFinished?.(room.gameState) ?? false;
+      if (isFinished && room.recapViewedBy?.[email]) continue; // seen it — same as the old unconditional skip, now gated on having actually looked
       const mySeats = room.seatOrder.filter((seat) => room.knownAccounts?.[seat] === email);
       const activeSeat = this.module.getActiveSeat?.(room.gameState) ?? null;
       const otherPlayerNames = room.seatOrder
         .filter((seat) => !mySeats.includes(seat))
         .map((seat) => room.knownNames?.[seat])
         .filter((name): name is string => !!name);
+      const status: OpenGameSummary<TSeat>['status'] = isFinished
+        ? 'recap'
+        : activeSeat !== null && mySeats.includes(activeSeat)
+          ? 'your-turn'
+          : 'waiting';
       out.push({
         gameId: this.module.id,
         code: room.code,
         mySeats,
         seatCount: room.seatOrder.length,
-        isMyTurn: activeSeat !== null && mySeats.includes(activeSeat),
+        status,
         lastActivityAt: room.lastActivityAt,
         createdAt: room.createdAt,
-        abandonable: this.isAbandonable(room.seatOrder, room.knownAccounts, mySeats),
+        abandonable: !isFinished && this.isAbandonable(room.seatOrder, room.knownAccounts, mySeats),
         otherPlayerNames,
       });
     }
@@ -686,6 +726,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     }
     const persisted: PersistedRoom<TState, TSeat> = {
       code: room.code,
+      roomId: room.roomId,
       gameId: this.module.id,
       gameState: room.gameState,
       seatOrder: [...room.seatOrder],
@@ -694,6 +735,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       knownAccounts: { ...room.knownAccounts },
       knownNames: { ...room.knownNames },
       chatMessages: [...room.chatMessages],
+      recapViewedBy: { ...room.recapViewedBy },
       createdAt: room.createdAt,
       lastActivityAt: room.lastActivityAt,
     };

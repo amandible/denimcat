@@ -17,6 +17,17 @@ export interface PersistedSeat {
  */
 export interface PersistedRoom<TState, TSeat extends string> {
   code: string;
+  /**
+   * The room's durable identity, independent of `code` — a room code gets
+   * reused once a room is deleted (see roomCode.ts's ~1M-value alphabet and
+   * RoomStore.createRoom's collision check, which only looks at currently
+   * existing rooms), so anything that must outlive a room's own lifecycle
+   * (survey_responses rows — see @denimcat/platform's SurveyResponse) needs
+   * an identity that survives the code being recycled. Optional only for
+   * backward compatibility with rooms persisted before this field existed —
+   * RoomStore.hydrateRoom mints one on first load if absent.
+   */
+  roomId?: string;
   gameId: string;
   gameState: TState;
   /**
@@ -62,6 +73,17 @@ export interface PersistedRoom<TState, TSeat extends string> {
   knownNames?: Partial<Record<TSeat, string>>;
   /** Never cleared, bounded by RoomStore.MAX_CHAT_HISTORY. Optional only for backward compatibility with rooms persisted before this feature — RoomStore.hydrateRoom defaults it to []. */
   chatMessages?: ChatMessage[];
+  /**
+   * Every account email that has viewed this room's recap since it
+   * finished — see GameModule.isRoomFinished and RoomStore.listOpenRoomsForAccount.
+   * Keyed by account email, NOT by seat: the recap is something a *person*
+   * has or hasn't seen, not something tracked per seat they happened to
+   * occupy, so one visit from a hotseat player (who may hold every seat)
+   * clears the whole room at once. Never cleared once set. Optional only
+   * for backward compatibility with rooms persisted before this field
+   * existed — RoomStore.hydrateRoom defaults it to {}.
+   */
+  recapViewedBy?: Record<string, true>;
   createdAt: number;
   lastActivityAt: number;
 }

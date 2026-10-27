@@ -267,6 +267,41 @@ async function seedTurnRepo(code: string, seats: Partial<Record<TurnSeat, Persis
   return repo;
 }
 
+type ListState = { turn: TurnSeat | null; finished: boolean };
+
+function makeListModule(): GameModule<ListState, undefined, TurnSeat> {
+  return {
+    id: 'list-game',
+    displayName: 'List Game',
+    namespace: '/list',
+    minSeats: 2,
+    maxSeats: 2,
+    parseConfig: () => undefined,
+    seatsForConfig: () => ['p1', 'p2'],
+    createInitialState: () => ({ turn: 'p1', finished: false }),
+    registerHandlers: () => {},
+    getActiveSeat: (state) => (state.finished ? null : state.turn),
+    isRoomFinished: (state) => state.finished,
+  };
+}
+
+/**
+ * Flips `finished` to true in BOTH the repository (what listOpenRoomsForAccount
+ * reads via findByAccountEmail) and the live cached room (what getRoom-based
+ * methods like joinRoom/reconnectRoom/reconnectByAccount read) — these are
+ * two different read paths, so a test exercising both needs both updated,
+ * same as the existing precedent elsewhere in this file for "mutating the
+ * live cached object directly is enough, same instance getRoom returns".
+ */
+async function finishRoom(store: RoomStore<ListState, undefined, TurnSeat>, repo: InMemoryRoomRepository<ListState, TurnSeat>, code: string): Promise<void> {
+  const persisted = await repo.get(code);
+  if (!persisted) throw new Error('room not persisted');
+  await repo.save({ ...persisted, gameState: { ...persisted.gameState, finished: true } });
+
+  const live = await store.getRoom(code);
+  if (live) live.gameState = { ...live.gameState, finished: true };
+}
+
 describe('RoomStore async-play turn notifications', () => {
   it('emails the newly-active seat when it is offline and has an email on file', async () => {
     const repo = await seedTurnRepo('AAAA', {
@@ -502,25 +537,7 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
 });
 
 describe('RoomStore.listOpenRoomsForAccount', () => {
-  type ListState = { turn: TurnSeat | null; finished: boolean };
-
-  function makeListModule(): GameModule<ListState, undefined, TurnSeat> {
-    return {
-      id: 'list-game',
-      displayName: 'List Game',
-      namespace: '/list',
-      minSeats: 2,
-      maxSeats: 2,
-      parseConfig: () => undefined,
-      seatsForConfig: () => ['p1', 'p2'],
-      createInitialState: () => ({ turn: 'p1', finished: false }),
-      registerHandlers: () => {},
-      getActiveSeat: (state) => (state.finished ? null : state.turn),
-      isRoomFinished: (state) => state.finished,
-    };
-  }
-
-  it('computes isMyTurn correctly for a normal room — true only when the active seat is mine', async () => {
+  it('status is "your-turn" when the active seat is mine', async () => {
     const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
     const store = new RoomStore(makeListModule(), repo, fakeNamespace());
     const created = await store.createRoom(undefined);
@@ -532,10 +549,10 @@ describe('RoomStore.listOpenRoomsForAccount', () => {
 
     const aliceGames = await store.listOpenRoomsForAccount('alice@example.com');
     expect(aliceGames).toHaveLength(1);
-    expect(aliceGames[0]).toMatchObject({ code: created.roomCode, gameId: 'list-game', mySeats: ['p1'], seatCount: 2, isMyTurn: true });
+    expect(aliceGames[0]).toMatchObject({ code: created.roomCode, gameId: 'list-game', mySeats: ['p1'], seatCount: 2, status: 'your-turn' });
 
     const bobGames = await store.listOpenRoomsForAccount('bob@example.com');
-    expect(bobGames[0].isMyTurn).toBe(false);
+    expect(bobGames[0].status).toBe('waiting');
 
     store.stop();
   });
@@ -553,12 +570,12 @@ describe('RoomStore.listOpenRoomsForAccount', () => {
     const games = await store.listOpenRoomsForAccount('alice@example.com');
     expect(games).toHaveLength(1);
     expect(games[0].mySeats).toEqual(['p1', 'p2']);
-    expect(games[0].isMyTurn).toBe(true); // active seat (p1) is always one of mySeats here
+    expect(games[0].status).toBe('your-turn'); // active seat (p1) is always one of mySeats here
 
     store.stop();
   });
 
-  it('excludes a room once GameModule.isRoomFinished is true for it', async () => {
+  it('status is "recap" once the game is finished and I have not yet viewed it', async () => {
     const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
     const store = new RoomStore(makeListModule(), repo, fakeNamespace());
     const created = await store.createRoom(undefined);
@@ -566,12 +583,48 @@ describe('RoomStore.listOpenRoomsForAccount', () => {
     if (!created.ok) return;
 
     await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
-    expect(await store.listOpenRoomsForAccount('alice@example.com')).toHaveLength(1);
+    await finishRoom(store, repo, created.roomCode);
 
-    const persisted = await repo.get(created.roomCode);
-    if (!persisted) throw new Error('room not persisted');
-    await repo.save({ ...persisted, gameState: { ...persisted.gameState, finished: true } });
+    const games = await store.listOpenRoomsForAccount('alice@example.com');
+    expect(games).toHaveLength(1);
+    expect(games[0].status).toBe('recap');
+    expect(games[0].abandonable).toBe(false); // an ended game isn't "abandoned" — see Task 3's plan text
+    store.stop();
+  });
 
+  it('a finished room drops off the list entirely once I have viewed it', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await finishRoom(store, repo, created.roomCode);
+    expect((await store.listOpenRoomsForAccount('alice@example.com'))[0].status).toBe('recap');
+
+    // Reconnecting into the finished room marks it viewed — see the
+    // "join/reconnect backfills recapViewedBy" describe block below for a
+    // direct test of that backfill itself.
+    await store.reconnectByAccount(created.roomCode, 'alice@example.com', 'socket-2');
+    expect(await store.listOpenRoomsForAccount('alice@example.com')).toEqual([]);
+    store.stop();
+  });
+
+  it('a hotseat room (I hold every seat) clears for the WHOLE room from one visit, not seat-by-seat', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'alice@example.com');
+    await finishRoom(store, repo, created.roomCode);
+    expect((await store.listOpenRoomsForAccount('alice@example.com'))[0].status).toBe('recap');
+
+    // One visit, via a single reconnect_by_account call — not one per seat held.
+    await store.reconnectByAccount(created.roomCode, 'alice@example.com', 'socket-3');
     expect(await store.listOpenRoomsForAccount('alice@example.com')).toEqual([]);
     store.stop();
   });
@@ -623,6 +676,89 @@ describe('RoomStore.listOpenRoomsForAccount', () => {
     expect(room?.seats.p2).toBeUndefined(); // the live seat record is really gone
 
     expect((await store.listOpenRoomsForAccount('alice@example.com'))[0].otherPlayerNames).toEqual(['Bob']);
+    store.stop();
+  });
+});
+
+describe('RoomStore.createRoom', () => {
+  it('mints a roomId that survives the room being hydrated fresh from the repository', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store1 = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store1.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const room1 = await store1.getRoom(created.roomCode);
+    expect(typeof room1?.roomId).toBe('string');
+    expect(room1?.roomId.length).toBeGreaterThan(0);
+    store1.stop();
+
+    // A fresh RoomStore simulates a server restart — nothing cached, must
+    // hydrate from the repository alone.
+    const store2 = new RoomStore(makeModule(), repo, fakeNamespace());
+    const room2 = await store2.getRoom(created.roomCode);
+    expect(room2?.roomId).toBe(room1?.roomId);
+    store2.stop();
+  });
+});
+
+describe('RoomStore join/reconnect backfills recapViewedBy', () => {
+  it('joinRoom marks recapViewedBy for an account arriving into an already-finished room', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await finishRoom(store, repo, created.roomCode);
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.recapViewedBy['alice@example.com']).toBe(true);
+    store.stop();
+  });
+
+  it('reconnectRoom marks recapViewedBy for an account reconnecting into an already-finished room', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const joined = await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    expect(joined.ok).toBe(true);
+    if (!joined.ok) return;
+    await finishRoom(store, repo, created.roomCode);
+
+    await store.reconnectRoom(created.roomCode, 'p1', joined.seatToken!, 'socket-2', 'alice@example.com');
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.recapViewedBy['alice@example.com']).toBe(true);
+    store.stop();
+  });
+
+  it('reconnectByAccount marks recapViewedBy for an account arriving into an already-finished room', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    await finishRoom(store, repo, created.roomCode);
+
+    await store.reconnectByAccount(created.roomCode, 'alice@example.com', 'socket-2');
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.recapViewedBy['alice@example.com']).toBe(true);
+    store.stop();
+  });
+
+  it('joining/reconnecting into a NOT-yet-finished room never touches recapViewedBy', async () => {
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+    const room = await store.getRoom(created.roomCode);
+    expect(room?.recapViewedBy).toEqual({});
     store.stop();
   });
 });
