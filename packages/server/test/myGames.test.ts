@@ -116,7 +116,22 @@ describe('GET /my-games', () => {
     }).then((r) => r.json());
   }
 
-  it('lists an open room with the right isMyTurn for each seat-holder, and {ok:false} without a session', async () => {
+  /**
+   * Flips `phase` to 'ended' in BOTH the repository (what GET /my-games
+   * reads via listOpenRoomsForAccount's findByAccountEmail) and the live
+   * cached room (what a socket event like reconnect_by_account reads via
+   * getRoom) — two different read paths, so a test exercising both (e.g.
+   * finishing a room THEN reconnecting into it) needs both updated.
+   */
+  async function finishRoom(code: string): Promise<void> {
+    const persisted = await repository.get(code);
+    if (!persisted) throw new Error('room not persisted');
+    await repository.save({ ...persisted, gameState: { ...persisted.gameState, phase: 'ended' } });
+    const live = await store.getRoom(code);
+    if (live) live.gameState = { ...live.gameState, phase: 'ended' };
+  }
+
+  it('lists an open room with the right status for each seat-holder, and {ok:false} without a session', async () => {
     const aliceToken = await signIn('alice@example.com');
     const bobToken = await signIn('bob@example.com');
     const aliceSocket = await connect(aliceToken);
@@ -136,18 +151,40 @@ describe('GET /my-games', () => {
     const aliceEntry = aliceGames.games[0];
     expect(aliceEntry).toMatchObject({ gameId: 'mint-condition', code: roomCode, displayName: 'Mint Condition', seatCount: 2, mySeatCount: 1 });
     // Auctions start active for the seat that just joined last — p1 acts first by construction, so alice (p1) is the one actionable turn 1.
-    expect(aliceEntry.isMyTurn).toBe(true);
+    expect(aliceEntry.status).toBe('your-turn');
 
     const bobGames = await myGames(bobToken);
     expect(bobGames.games).toHaveLength(1);
-    expect(bobGames.games[0].isMyTurn).toBe(false);
+    expect(bobGames.games[0].status).toBe('waiting');
 
     // An account with no seats anywhere gets an empty (not missing) list.
     const carolToken = await signIn('carol@example.com');
     expect(await myGames(carolToken)).toEqual({ ok: true, games: [] });
   });
 
-  it('drops a room from the list once GameModule.isRoomFinished is true for it', async () => {
+  it('a finished, unviewed room shows status "recap" and sorts ahead of "waiting"', async () => {
+    const aliceToken = await signIn('alice@example.com');
+    const bobToken = await signIn('bob@example.com');
+    const aliceSocket = await connect(aliceToken);
+    const bobSocket = await connect(bobToken);
+
+    // A waiting room (not alice's turn — bob opened it).
+    const waiting = await emitAck<{ ok: true; roomCode: string }>(bobSocket, 'create_room', { playerCount: 2 });
+    await emitAck(bobSocket, 'join_room', { roomCode: waiting.roomCode, role: 'p1' });
+    await emitAck(aliceSocket, 'join_room', { roomCode: waiting.roomCode, role: 'p2' });
+
+    // A finished room alice hasn't viewed yet.
+    const finished = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+    await emitAck(aliceSocket, 'join_room', { roomCode: finished.roomCode, role: 'p1' });
+    await finishRoom(finished.roomCode);
+
+    const games = (await myGames(aliceToken)).games;
+    expect(games.find((g: any) => g.code === finished.roomCode).status).toBe('recap');
+    const codes = games.map((g: any) => g.code);
+    expect(codes.indexOf(finished.roomCode)).toBeLessThan(codes.indexOf(waiting.roomCode));
+  });
+
+  it('a finished room the account has viewed is absent from the list entirely', async () => {
     const aliceToken = await signIn('alice@example.com');
     const aliceSocket = await connect(aliceToken);
     const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
@@ -156,10 +193,11 @@ describe('GET /my-games', () => {
 
     expect((await myGames(aliceToken)).games).toHaveLength(1);
 
-    const persisted = await repository.get(roomCode);
-    if (!persisted) throw new Error('room not persisted');
-    await repository.save({ ...persisted, gameState: { ...persisted.gameState, phase: 'ended' } });
+    await finishRoom(roomCode);
+    expect((await myGames(aliceToken)).games[0].status).toBe('recap');
 
+    // A real reconnect — same path a client actually takes on revisiting a room.
+    await emitAck(aliceSocket, 'reconnect_by_account', { roomCode });
     expect(await myGames(aliceToken)).toEqual({ ok: true, games: [] });
   });
 

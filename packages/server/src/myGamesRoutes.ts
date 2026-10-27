@@ -47,7 +47,7 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
           roomUrlPath: module.roomUrlPath ? module.roomUrlPath(summary.code) : `/${module.id}/room/${summary.code}`,
           seatCount: summary.seatCount,
           mySeatCount: summary.mySeats.length,
-          isMyTurn: summary.isMyTurn,
+          status: summary.status,
           lastActivityAt: summary.lastActivityAt,
           createdAt: summary.createdAt,
           abandonable: summary.abandonable,
@@ -56,8 +56,12 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
       }),
     );
 
-    // Your-turn games first, most recently created first within each group.
-    const games = perGame.flat().sort((a, b) => (a.isMyTurn === b.isMyTurn ? b.createdAt - a.createdAt : a.isMyTurn ? -1 : 1));
+    // Your-turn first, then recap (a result is waiting — the other genuinely
+    // actionable state), then waiting; newest-created first within each group.
+    const STATUS_PRIORITY: Record<'your-turn' | 'waiting' | 'recap', number> = { 'your-turn': 0, recap: 1, waiting: 2 };
+    const games = perGame
+      .flat()
+      .sort((a, b) => (STATUS_PRIORITY[a.status] !== STATUS_PRIORITY[b.status] ? STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status] : b.createdAt - a.createdAt));
 
     res.json({ ok: true, games });
   });

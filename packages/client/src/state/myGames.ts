@@ -8,7 +8,13 @@ export interface MyGame {
   roomUrlPath: string;
   seatCount: number;
   mySeatCount: number;
-  isMyTurn: boolean;
+  /**
+   * 'your-turn': it's one of my seats' turn. 'waiting': it isn't, and the
+   * game isn't over. 'recap': the game finished and I haven't looked at
+   * the result yet — once I have, the room drops off this list entirely
+   * rather than ever reporting a fourth status.
+   */
+  status: 'your-turn' | 'waiting' | 'recap';
   lastActivityAt: number;
   createdAt: number;
   /** True when no other seat has ever been joined by a different account — safe to offer "abandon" for. */

@@ -63,8 +63,8 @@ export function HomeView() {
                   </div>
                 </a>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                  <strong style={{ color: game.isMyTurn ? 'var(--accent)' : 'var(--muted)', fontSize: 13 }}>
-                    {game.isMyTurn ? 'Your turn' : 'Waiting'}
+                  <strong style={{ color: game.status === 'waiting' ? 'var(--muted)' : 'var(--accent)', fontSize: 13 }}>
+                    {game.status === 'your-turn' ? 'Your turn' : game.status === 'recap' ? 'See how it ended' : 'Waiting'}
                   </strong>
                   {game.abandonable && (
                     <button className="btn" style={{ fontSize: 12, padding: '4px 8px' }} onClick={() => handleAbandon(game)}>
