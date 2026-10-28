@@ -148,7 +148,7 @@ describe('survey-responses routes', () => {
         seat: 'p1',
         answers: [{ questionId: 'fun', answer: 'Yes!' }],
       });
-      expect(result).toEqual({ ok: true });
+      expect(result).toEqual({ ok: true, alreadyAnswered: [] });
 
       const stored = await surveyRepository.listForGame('mint-condition');
       expect(stored).toHaveLength(1);
@@ -227,12 +227,37 @@ describe('survey-responses routes', () => {
       await finishRoom(created.roomCode);
 
       const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1' };
-      expect(await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'first' }] })).toEqual({ ok: true });
-      expect(await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'second' }] })).toEqual({ ok: true }); // still ok — a harmless no-op, not an error
+      expect(await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'first' }] })).toEqual({ ok: true, alreadyAnswered: [] });
+      expect(await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'second' }] })).toEqual({
+        ok: true,
+        alreadyAnswered: ['fun'], // still ok — a harmless no-op, not an error, but honestly reported as not-newly-stored
+      });
 
       const stored = await surveyRepository.listForGame('mint-condition');
       expect(stored).toHaveLength(1);
       expect(stored[0].answer).toBe('first'); // first write wins
+    });
+
+    it('reports which questions were already on file, so a caller never mistakes a discarded resubmit for a stored answer', async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
+      await finishRoom(created.roomCode);
+
+      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1' };
+      await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'first' }] });
+
+      // Resubmitting 'fun' (already on file) alongside 'not-fun' (new) — the
+      // response must distinguish the two, not report a blanket success.
+      const result = await submitSurvey(aliceToken, {
+        ...base,
+        answers: [
+          { questionId: 'fun', answer: 'a different answer, discarded' },
+          { questionId: 'not-fun', answer: 'brand new' },
+        ],
+      });
+      expect(result).toEqual({ ok: true, alreadyAnswered: ['fun'] });
     });
   });
 

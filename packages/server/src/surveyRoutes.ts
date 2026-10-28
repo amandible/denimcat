@@ -71,9 +71,9 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
       return;
     }
 
-    await Promise.all(
-      answers.map((a) =>
-        surveyRepository.submit({
+    const results = await Promise.all(
+      answers.map(async (a) => {
+        const { stored } = await surveyRepository.submit({
           gameId,
           roomId: room.roomId,
           roomCode: room.code,
@@ -81,10 +81,16 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
           accountEmail: session.email,
           questionId: a.questionId,
           answer: a.answer.trim(),
-        }),
-      ),
+        });
+        return { questionId: a.questionId, stored };
+      }),
     );
-    res.json({ ok: true });
+    // A question that already had an answer on file is NOT silently
+    // overwritten (see SurveyRepository.submit's idempotency) — reported
+    // back so the client never shows "thanks for the feedback" for an
+    // answer that was actually discarded.
+    const alreadyAnswered = results.filter((r) => !r.stored).map((r) => r.questionId);
+    res.json({ ok: true, alreadyAnswered });
   });
 
   router.get('/:gameId', async (req, res) => {

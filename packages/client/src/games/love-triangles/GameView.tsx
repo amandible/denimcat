@@ -86,7 +86,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           </div>
         )}
 
-        {gameState.phase === 'ended' && gameState.winner && mySeat && (
+        {gameState.phase === 'ended' && gameState.winner && (
           <div style={{ marginTop: 16 }}>
             <RecapPanel
               gameId="love-triangles"

@@ -53,4 +53,13 @@ describe('InMemorySurveyRepository', () => {
     expect(found).toHaveLength(1);
     expect(found[0].answer).toBe('first answer');
   });
+
+  it('submit() reports whether it actually stored a new row — true the first time, false on a later duplicate', async () => {
+    const repo = new InMemorySurveyRepository();
+    const first = await repo.submit(response());
+    expect(first).toEqual({ stored: true });
+
+    const second = await repo.submit(response({ answer: 'different text, same (roomId, seat, questionId)' }));
+    expect(second).toEqual({ stored: false });
+  });
 });

@@ -75,7 +75,10 @@ export function NotesView({ gameId }: { gameId: string }) {
             {rows.map((r, i) => (
               <p key={i} style={{ margin: '8px 0' }}>
                 <strong>
-                  {r.seat} — {QUESTION_TEXT[r.questionId] ?? r.questionId}
+                  {/* questionId always shown alongside the text, not just as a fallback — the standard
+                      questions currently all share the literal placeholder "TODO: question text" (see
+                      STANDARD_SURVEY_QUESTIONS), so the text alone can't tell two rows apart yet. */}
+                  {r.seat} — {QUESTION_TEXT[r.questionId] ?? r.questionId} ({r.questionId})
                 </strong>
                 <br />
                 {r.answer}

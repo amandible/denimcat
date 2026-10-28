@@ -133,7 +133,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           <ScoreBoard state={gameState} />
         </div>
 
-        {gameState.phase === 'ended' && mySeat && (
+        {gameState.phase === 'ended' && (
           <div style={{ marginTop: 16 }}>
             <RecapPanel
               gameId="mint-condition"

@@ -837,11 +837,29 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return anySeatHasEmail ? this.idleTimeoutWithEmailsMs : this.idleTimeoutMs;
   }
 
+  /**
+   * True once every account that ever held a seat here has viewed this
+   * room's recap — false (never sweep) for a room that isn't finished at
+   * all, since that's not what this check is about. Guards sweepIdleRooms:
+   * without it, a finished-but-unviewed room (the exact case the "recap"
+   * status exists for) could get deleted by the ordinary idle timeout
+   * before the slowest account to look ever gets the chance — directly
+   * breaking the "stays on the list until viewed, full stop" promise.
+   */
+  private recapFullyViewed(room: LiveRoom<TState, TSeat>): boolean {
+    if (!this.module.isRoomFinished?.(room.gameState)) return true;
+    const accounts = new Set(Object.values(room.knownAccounts).filter((email): email is string => !!email));
+    for (const email of accounts) {
+      if (!room.recapViewedBy[email]) return false;
+    }
+    return true;
+  }
+
   private async sweepIdleRooms(): Promise<void> {
     const now = Date.now();
     for (const [code, room] of this.cache) {
       const hasOccupant = Object.keys(room.seats).length > 0 || room.spectatorSocketIds.size > 0;
-      if (!hasOccupant && now - room.lastActivityAt > this.idleTimeoutFor(room)) {
+      if (!hasOccupant && now - room.lastActivityAt > this.idleTimeoutFor(room) && this.recapFullyViewed(room)) {
         this.cache.delete(code);
         await this.repository.delete(code);
       }

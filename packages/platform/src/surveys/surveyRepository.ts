@@ -4,8 +4,17 @@ import { getDb } from '../db/client';
 export type { SurveyResponse };
 
 export interface SurveyRepository {
-  /** Idempotent on (roomId, seat, questionId) — a duplicate submit (e.g. a network retry) is a silent no-op, never an error or a second row. */
-  submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<void>;
+  /**
+   * Idempotent on (roomId, seat, questionId) — a duplicate submit (e.g. a
+   * network retry, or a player re-answering a question they already
+   * answered) never errors or creates a second row; the first answer
+   * always wins. Returns `stored: true` only when this call's row was the
+   * one actually written, so a caller (the survey route) can tell a
+   * genuinely-new answer apart from one that silently matched something
+   * already on file — the route surfaces that distinction back to the
+   * client rather than claiming success for an answer that was discarded.
+   */
+  submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<{ stored: boolean }>;
   /** Every response for a game, newest first. */
   listForGame(gameId: string): Promise<SurveyResponse[]>;
 }
@@ -18,10 +27,11 @@ function responseKey(response: Pick<SurveyResponse, 'roomId' | 'seat' | 'questio
 export class InMemorySurveyRepository implements SurveyRepository {
   private responses = new Map<string, SurveyResponse>();
 
-  async submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<void> {
+  async submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<{ stored: boolean }> {
     const key = responseKey(response);
-    if (this.responses.has(key)) return; // first write wins — same effect as the real table's ON CONFLICT DO NOTHING
+    if (this.responses.has(key)) return { stored: false }; // first write wins — same effect as the real table's ON CONFLICT DO NOTHING
     this.responses.set(key, { ...response, createdAt: Date.now() });
+    return { stored: true };
   }
 
   async listForGame(gameId: string): Promise<SurveyResponse[]> {
@@ -41,14 +51,19 @@ export class InMemorySurveyRepository implements SurveyRepository {
  * losing a submission would not be.
  */
 export class PostgresSurveyRepository implements SurveyRepository {
-  async submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<void> {
+  async submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<{ stored: boolean }> {
     const db = getDb();
-    if (!db) return;
-    await db`
+    if (!db) return { stored: false };
+    // RETURNING with ON CONFLICT DO NOTHING only returns a row when the
+    // insert actually happened — a conflicted (already-answered) write
+    // returns zero rows, which is exactly the "stored: false" signal above.
+    const rows = await db`
       INSERT INTO survey_responses (game_id, room_id, room_code, seat, account_email, question_id, answer)
       VALUES (${response.gameId}, ${response.roomId}, ${response.roomCode}, ${response.seat}, ${response.accountEmail}, ${response.questionId}, ${response.answer})
       ON CONFLICT (room_id, seat, question_id) DO NOTHING
+      RETURNING id
     `;
+    return { stored: rows.length > 0 };
   }
 
   async listForGame(gameId: string): Promise<SurveyResponse[]> {

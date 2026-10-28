@@ -3,6 +3,8 @@ import { STANDARD_SURVEY_QUESTIONS } from '@denimcat/shared';
 import { loadSessionToken } from '../state/authToken';
 import { SERVER_URL } from '../socket';
 
+type SubmitState = { kind: 'idle' } | { kind: 'dismissed' } | { kind: 'submitted'; allNew: boolean } | { kind: 'failed' };
+
 /**
  * Shown in place of a finished room's normal play UI — the one shared
  * implementation every game uses, same role ActivityPanel plays for
@@ -10,6 +12,11 @@ import { SERVER_URL } from '../socket';
  * text. `resultSummary` is caller-supplied (score, winner) since this
  * component never inspects any particular game's state itself, same
  * extension-point pattern ActivityPanel's `renderLogText` already uses.
+ *
+ * `resultSummary` always renders, even for a spectator (`mySeat` omitted)
+ * — watching a game to the end and then seeing nothing is worse than a
+ * player never being offered the survey at all. Only the feedback form
+ * itself is gated on holding a seat.
  *
  * One seat per instance — `GameView` is always rendered per-seat, even in
  * hotseat mode (see HotseatRoom.tsx: one GameView/connection per seat,
@@ -20,12 +27,11 @@ import { SERVER_URL } from '../socket';
  * `GameView` instance represents.
  *
  * Submitting is a single bulk POST of whatever questions were actually
- * filled in; a blank question is treated as silently skipped. Server-side
- * submission is a durable, one-shot record — see SurveyRepository.submit's
- * idempotency — so once this seat's form reports "submitted" or "skipped"
- * here, reloading the page won't re-offer it (and neither will a later
- * visit, once the room's recap status clears — see the design doc's
- * "don't nag" constraint).
+ * filled in; a blank question is treated as silently skipped. The server
+ * reports back which questions it actually stored vs. which were already
+ * on file (see SurveyRepository.submit's idempotency) — a question
+ * already answered is never silently overwritten, so this never claims
+ * "thanks for the feedback" for an answer that was actually discarded.
  */
 export function RecapPanel({
   gameId,
@@ -35,38 +41,43 @@ export function RecapPanel({
 }: {
   gameId: string;
   roomCode: string;
-  mySeat: string;
+  /** Null/omitted for a spectator — resultSummary still shows, but no form. */
+  mySeat?: string | null;
   resultSummary: ReactNode;
 }) {
-  const [dismissed, setDismissed] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [state, setState] = useState<SubmitState>({ kind: 'idle' });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
 
   async function submit() {
+    if (!mySeat) return;
     const answers = STANDARD_SURVEY_QUESTIONS.map((q) => ({ questionId: q.id, answer: (drafts[q.id] ?? '').trim() })).filter(
       (a) => a.answer.length > 0,
     );
     if (answers.length === 0) {
-      setDismissed(true);
+      setState({ kind: 'dismissed' });
       return;
     }
     const token = loadSessionToken();
-    if (!token) return;
+    if (!token) {
+      setState({ kind: 'failed' });
+      return;
+    }
     setSaving(true);
-    setFailed(false);
     try {
       const res = await fetch(`${SERVER_URL}/survey-responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ gameId, roomCode, seat: mySeat, answers }),
       });
-      const data = await res.json();
-      if (data.ok) setSubmitted(true);
-      else setFailed(true);
+      const data: { ok: true; alreadyAnswered: string[] } | { ok: false } = await res.json();
+      if (!data.ok) {
+        setState({ kind: 'failed' });
+        return;
+      }
+      setState({ kind: 'submitted', allNew: data.alreadyAnswered.length === 0 });
     } catch {
-      setFailed(true);
+      setState({ kind: 'failed' });
     } finally {
       setSaving(false);
     }
@@ -76,31 +87,38 @@ export function RecapPanel({
     <div className="panel" style={{ padding: 16, marginBottom: 16 }}>
       <h3 style={{ marginTop: 0 }}>Game over</h3>
       <div style={{ marginBottom: 12 }}>{resultSummary}</div>
-      {dismissed || submitted ? (
-        <p style={{ fontSize: 13, color: 'var(--muted)' }}>{submitted ? 'Thanks for the feedback!' : 'Skipped.'}</p>
-      ) : (
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-          {STANDARD_SURVEY_QUESTIONS.map((q) => (
-            <div key={q.id} style={{ marginBottom: 8 }}>
-              <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>{q.text}</label>
-              <input
-                value={drafts[q.id] ?? ''}
-                onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                style={{ width: '100%', fontSize: 13, padding: '4px 8px' }}
-              />
+      {mySeat &&
+        (state.kind === 'dismissed' || state.kind === 'submitted' ? (
+          <p style={{ fontSize: 13, color: 'var(--muted)' }}>
+            {state.kind === 'submitted'
+              ? state.allNew
+                ? 'Thanks for the feedback!'
+                : 'Thanks! (Some of these were already on file and were left unchanged.)'
+              : 'Skipped.'}
+          </p>
+        ) : (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            {STANDARD_SURVEY_QUESTIONS.map((q) => (
+              <div key={q.id} style={{ marginBottom: 8 }}>
+                <label style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>{q.text}</label>
+                <input
+                  value={drafts[q.id] ?? ''}
+                  onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                  style={{ width: '100%', fontSize: 13, padding: '4px 8px' }}
+                />
+              </div>
+            ))}
+            {state.kind === 'failed' && <p style={{ fontSize: 12, color: 'var(--accent)' }}>Something went wrong — try again.</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" disabled={saving} onClick={submit} style={{ fontSize: 13 }}>
+                Submit
+              </button>
+              <button className="btn" onClick={() => setState({ kind: 'dismissed' })} style={{ fontSize: 13 }}>
+                Skip
+              </button>
             </div>
-          ))}
-          {failed && <p style={{ fontSize: 12, color: 'var(--accent)' }}>Something went wrong — try again.</p>}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-primary" disabled={saving} onClick={submit} style={{ fontSize: 13 }}>
-              Submit
-            </button>
-            <button className="btn" onClick={() => setDismissed(true)} style={{ fontSize: 13 }}>
-              Skip
-            </button>
           </div>
-        </div>
-      )}
+        ))}
     </div>
   );
 }

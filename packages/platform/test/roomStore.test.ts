@@ -611,6 +611,64 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
     expect(await repo.get('EMPT')).toBeNull();
     store.stop();
   });
+
+  it(
+    'never sweeps a finished room while an account that held a seat still has not viewed its recap — ' +
+      'otherwise the "stays until viewed" promise breaks for whoever is slowest to look',
+    async () => {
+      const past = Date.now() - 1000;
+      const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+      await repo.save({
+        code: 'RCAP',
+        gameId: 'list-game',
+        gameState: { turn: null, finished: true },
+        seatOrder: ['p1', 'p2'],
+        seats: {},
+        knownAccounts: { p1: 'alice@example.com' },
+        recapViewedBy: {}, // alice hasn't looked yet
+        createdAt: past,
+        lastActivityAt: past,
+      });
+      const store = new RoomStore(makeListModule(), repo, fakeNamespace(), {
+        idleSweepMs: 15,
+        idleTimeoutMs: 20,
+        idleTimeoutWithEmailsMs: 10_000,
+      });
+
+      await store.getRoom('RCAP');
+      await new Promise((resolve) => setTimeout(resolve, 80)); // well past the short timeout
+
+      expect(await repo.get('RCAP')).not.toBeNull();
+      store.stop();
+    },
+  );
+
+  it('sweeps a finished room normally once every account that held a seat has viewed its recap', async () => {
+    const past = Date.now() - 1000;
+    const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+    await repo.save({
+      code: 'SEEN',
+      gameId: 'list-game',
+      gameState: { turn: null, finished: true },
+      seatOrder: ['p1', 'p2'],
+      seats: {},
+      knownAccounts: { p1: 'alice@example.com' },
+      recapViewedBy: { 'alice@example.com': true },
+      createdAt: past,
+      lastActivityAt: past,
+    });
+    const store = new RoomStore(makeListModule(), repo, fakeNamespace(), {
+      idleSweepMs: 15,
+      idleTimeoutMs: 20,
+      idleTimeoutWithEmailsMs: 10_000,
+    });
+
+    await store.getRoom('SEEN');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(await repo.get('SEEN')).toBeNull();
+    store.stop();
+  });
 });
 
 describe('RoomStore.listOpenRoomsForAccount', () => {
