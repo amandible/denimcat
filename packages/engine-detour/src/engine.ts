@@ -23,11 +23,14 @@ export function playCard(state: GameState, seat: SeatId, value: number, target: 
   const nextPlayer = next.players[seat];
   nextPlayer.hand = nextPlayer.hand.filter((v) => v !== value);
   next.cells[target] = { value, owner: seat };
-  pushLog(next, `${seat} played ${value}.`);
+  pushLog(next, `${seat} played ${value} on ${target}.`);
 
   const { pawnCell, pointsScored } = resolveChain(next, seat, directionFor(nextPlayer.deckId, value));
   next.pawnCell = pawnCell;
   nextPlayer.score += pointsScored;
+  if (pointsScored > 0) {
+    pushLog(next, `${seat} scored ${pointsScored} point${pointsScored > 1 ? 's' : ''}; the pawn is now on ${pawnCell}.`);
+  }
 
   if (nextPlayer.deck.length > 0) {
     const drawn = nextPlayer.deck.pop()!;
@@ -41,6 +44,7 @@ export function playCard(state: GameState, seat: SeatId, value: number, target: 
     }
     next.winner = determineWinners(finalScores);
     next.phase = 'ended';
+    pushLog(next, next.winner.length > 1 ? `Shared victory: ${next.winner.join(', ')}.` : `${next.winner[0]} wins!`);
   } else {
     const idx = next.seats.indexOf(seat);
     next.activeSeat = next.seats[(idx + 1) % next.seats.length];

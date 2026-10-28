@@ -104,6 +104,23 @@ describe('Detour room + game flow over real sockets', () => {
     expect(illegalTarget.ok).toBe(false);
   });
 
+  it('rejects a well-formed-looking but nonexistent cell id as a malformed payload, before it ever reaches the engine', async () => {
+    const s1 = await connect();
+    const s2 = await connect();
+    const roomCode = await createRoom(s1, { playerCount: 2 });
+    const p1Join = await emitAck<any>(s1, 'join_room', { roomCode, role: 'p1' });
+    await emitAck<any>(s2, 'join_room', { roomCode, role: 'p2' });
+    const myCard = p1Join.gameState.players.p1.hand[0];
+
+    // "0-4" and "3-0" look like valid "row-col" cell ids but name the two
+    // corners the board doesn't actually have.
+    const topRight = await emitAck<any>(s1, 'play_card', { roomCode, value: myCard, target: '0-4' });
+    expect(topRight).toEqual({ ok: false, error: { code: 'INVALID_PAYLOAD', message: expect.any(String) } });
+
+    const bottomLeft = await emitAck<any>(s1, 'play_card', { roomCode, value: myCard, target: '3-0' });
+    expect(bottomLeft).toEqual({ ok: false, error: { code: 'INVALID_PAYLOAD', message: expect.any(String) } });
+  });
+
   it('a legal play broadcasts the updated board and advances to the next seat', async () => {
     const s1 = await connect();
     const s2 = await connect();

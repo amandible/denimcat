@@ -33,4 +33,9 @@ describe('isLegalPlacement', () => {
     expect(hasLegalTarget(state, 1)).toBe(false);
     expect(isLegalPlacement(state, 1, '0-0')).toBe(false);
   });
+  it('rejects a target cell that does not exist on the board at all (defense in depth — callers should never pass one, but the engine must not throw if they do)', () => {
+    const state = makeState({ pawnCell: '1-0' });
+    expect(isLegalPlacement(state, 10, '0-4')).toBe(false); // the missing top-right cell
+    expect(isLegalPlacement(state, 10, '3-0')).toBe(false); // the missing bottom-left cell
+  });
 });

@@ -43,6 +43,6 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
     activeSeat: 'p1',
     phase: 'playing',
     winner: null,
-    log: [],
+    log: [`Game started with ${seats.length} players: ${seats.join(', ')}.`],
   };
 }

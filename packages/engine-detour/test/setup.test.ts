@@ -45,4 +45,9 @@ describe('dealGame', () => {
     expect(state.activeSeat).toBe('p1');
     expect(state.winner).toBeNull();
   });
+
+  it('logs the game starting with its seat list — so an async-play player returning later can tell this room apart from an empty log', () => {
+    const state = dealGame(3, Math.random);
+    expect(state.log).toContainEqual(expect.stringContaining('Game started with 3 players: p1, p2, p3'));
+  });
 });

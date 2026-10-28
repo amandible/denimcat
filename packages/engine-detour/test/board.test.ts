@@ -30,4 +30,19 @@ describe('cellInDirection', () => {
       expect(cellInDirection(`0-${col}`, 'up')).toBeNull();
     }
   });
+  it('returns null stepping onto a missing corner from the adjacent interior cell, not just from the opposite edge — the asymmetric case the two cut corners create', () => {
+    // '2-0' is a normal interior-column cell (row 2 has all 5 columns) one
+    // row above the missing bottom-left corner - this is NOT the same case
+    // as the row-3-to-row-4 off-board test above.
+    expect(cellInDirection('2-0', 'down')).toBeNull();
+    // '1-4' is a normal interior-column cell one row below the missing
+    // top-right corner.
+    expect(cellInDirection('1-4', 'up')).toBeNull();
+  });
+  it('returns null moving left from column 0 and right from column 4 at the interior rows (not just the already-tested row 0/row 3 edges)', () => {
+    expect(cellInDirection('1-0', 'left')).toBeNull();
+    expect(cellInDirection('2-0', 'left')).toBeNull();
+    expect(cellInDirection('1-4', 'right')).toBeNull();
+    expect(cellInDirection('2-4', 'right')).toBeNull();
+  });
 });
