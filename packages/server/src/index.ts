@@ -14,6 +14,7 @@ import type {
 } from '@denimcat/engine-love-triangles';
 import type { Color as TashKalarSeatId, GameState as TashKalarState, TashKalarConfig } from '@denimcat/engine-tashkalar';
 import type { Color as KingsGateSeatId, GameState as KingsGateState, KingsGateConfig } from '@denimcat/engine-kingsgate';
+import type { DetourConfig, GameState as DetourState, SeatId as DetourSeatId } from '@denimcat/engine-detour';
 import {
   RoomStore,
   attachSocketHandlers,
@@ -32,6 +33,7 @@ import { mintConditionModule } from './games/mint-condition/module';
 import { loveTrianglesModule } from './games/love-triangles/module';
 import { tashKalarModule } from '../../../private-games/other-games/server-tashkalar/module';
 import { kingsGateModule } from '../../../private-games/other-games/server-kingsgate/module';
+import { detourModule } from './games/detour/module';
 
 async function main() {
   await ensureSchema();
@@ -138,6 +140,17 @@ async function main() {
   );
   attachSocketHandlers(loveTrianglesNsp, loveTrianglesStore, loveTrianglesModule);
   gameStores.push({ module: loveTrianglesModule, store: loveTrianglesStore });
+
+  const detourRepository = createDefaultRoomRepository<DetourState, DetourSeatId>();
+  const detourNsp = io.of(detourModule.namespace);
+  const detourStore = new RoomStore<DetourState, DetourConfig, DetourSeatId>(
+    detourModule,
+    detourRepository,
+    detourNsp,
+    roomStoreOptions,
+  );
+  attachSocketHandlers(detourNsp, detourStore, detourModule);
+  gameStores.push({ module: detourModule, store: detourStore });
 
   const tashKalarRepository = createDefaultRoomRepository<TashKalarState, TashKalarSeatId>();
   const tashKalarNsp = io.of(tashKalarModule.namespace);
