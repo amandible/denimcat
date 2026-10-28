@@ -1,3 +1,4 @@
+import type { EngineResult as SharedEngineResult } from '@denimcat/shared';
 import type { CellId } from './board';
 
 export type Direction = 'up' | 'left' | 'right' | 'down';
@@ -28,3 +29,6 @@ export interface GameState {
   winner: SeatId[] | null;
   log: string[];
 }
+
+/** Bound to this engine's own GameState so every call site (just `EngineResult<T>`) is unaffected. */
+export type EngineResult<T = undefined> = SharedEngineResult<GameState, T>;
