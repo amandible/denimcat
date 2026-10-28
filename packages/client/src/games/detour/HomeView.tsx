@@ -42,7 +42,7 @@ export function DetourHomeView() {
     <main style={{ maxWidth: 420, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
       <div className="panel" style={{ width: '100%' }}>
         <h1 style={{ fontSize: 28 }}>Detour</h1>
-        <p style={{ color: 'var(--muted)', marginTop: 0 }}>TODO: Detour description</p>
+        <p style={{ color: 'var(--muted)', marginTop: 0 }}>Cards + arrows - first draft</p>
         {loadIsOwner() && (
           <p style={{ fontSize: 13, marginTop: -8 }}>
             <a href="/detour/notes">Playtest notes</a>

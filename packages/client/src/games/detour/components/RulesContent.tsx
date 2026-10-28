@@ -1,8 +1,10 @@
 /**
- * Transcribed close to design/detour/rules.md's own wording, per the
- * established convention for this platform's rules dialogs (see Mint
- * Condition's RulesContent.tsx) — not a fresh rewrite. Broken into
- * headed sections for readability; every value and rule is unchanged.
+ * Based on design/detour/rules.md, updated to match the clarifications in
+ * docs/superpowers/specs/2026-10-28-detour-design.md (the "Rules, as
+ * resolved" section) — per Alison's request, this panel tracks the
+ * design doc rather than the original hand-written draft, which predates
+ * a couple of the clarifications below. Broken into headed sections for
+ * readability.
  */
 export function RulesContent() {
   return (
@@ -43,14 +45,16 @@ export function RulesContent() {
         already moved onto this turn.
       </p>
       <p>
-        Any card that's too low to play (that is, it's equal or lower than every card on the board) becomes
-        wild: it can be played on any stack.
+        If a card has no legal (lower-numbered) target anywhere on the board, it becomes wild for that play:
+        it can be played on any cell instead — except the one the pawn is on, which is never a legal target,
+        wild or not.
       </p>
 
       <h4>Scoring</h4>
       <p>
-        When everybody's hand is empty, players gain 1VP for each of their cards that is visible (i.e. it's
-        on top of a stack) and the highest score wins.
+        When everybody's hand is empty, players gain 1 point for each of their cards that is visible (i.e.
+        it's on top of a stack), added to the points scored from chaining during play. Highest total score
+        wins; a tie is a shared win.
       </p>
     </>
   );

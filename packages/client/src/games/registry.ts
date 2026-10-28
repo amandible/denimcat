@@ -28,7 +28,7 @@ export const GAMES: GameDescriptor[] = [
     slug: 'detour',
     displayName: 'Detour',
     namespace: '/detour',
-    tagline: 'TODO: Detour description',
+    tagline: 'Cards + arrows - first draft',
   },
   {
     slug: 'tashkalar',
