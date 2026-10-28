@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { STANDARD_SURVEY_QUESTIONS, type SurveyResponse } from '@denimcat/shared';
 import { loadSessionToken } from '../state/authToken';
+import { markFeedbackRead } from '../state/feedback';
 import { SERVER_URL } from '../socket';
 
 const QUESTION_TEXT: Record<string, string> = Object.fromEntries(STANDARD_SURVEY_QUESTIONS.map((q) => [q.id, q.text]));
@@ -29,8 +30,16 @@ export function NotesView({ gameId }: { gameId: string }) {
     fetch(`${SERVER_URL}/survey-responses/${gameId}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => res.json())
       .then((data: { ok: true; responses: SurveyResponse[] } | { ok: false }) => {
-        if (data.ok) setResponses(data.responses);
-        else setForbidden(true);
+        if (data.ok) {
+          setResponses(data.responses);
+          // Marks read now that the responses that exist as of this load
+          // have actually been shown — see HomeView's "new feedback" row,
+          // which this clears. Fire-and-forget: a failure here just leaves
+          // the indicator on, not worth blocking or retrying for.
+          markFeedbackRead(gameId);
+        } else {
+          setForbidden(true);
+        }
       })
       .catch(() => setForbidden(true));
   }, [gameId]);

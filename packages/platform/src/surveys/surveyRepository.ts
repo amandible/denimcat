@@ -17,6 +17,12 @@ export interface SurveyRepository {
   submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<{ stored: boolean }>;
   /** Every response for a game, newest first. */
   listForGame(gameId: string): Promise<SurveyResponse[]>;
+  /** The newest `createdAt` across every response for a game, or null if it has none — the "is there new feedback" signal compared against getReadAt. */
+  getLatestResponseAt(gameId: string): Promise<number | null>;
+  /** When this account last viewed this game's notes page, or null if never — see NotesView. */
+  getReadAt(email: string, gameId: string): Promise<number | null>;
+  /** Records that this account viewed this game's notes page at `at` — upserts, so a later call for the same (email, gameId) overwrites rather than erroring. */
+  markRead(email: string, gameId: string, at: number): Promise<void>;
 }
 
 function responseKey(response: Pick<SurveyResponse, 'roomId' | 'seat' | 'questionId'>): string {
@@ -26,6 +32,7 @@ function responseKey(response: Pick<SurveyResponse, 'roomId' | 'seat' | 'questio
 /** Used for tests and as the sole store when no DATABASE_URL is configured. */
 export class InMemorySurveyRepository implements SurveyRepository {
   private responses = new Map<string, SurveyResponse>();
+  private readAt = new Map<string, number>();
 
   async submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<{ stored: boolean }> {
     const key = responseKey(response);
@@ -36,6 +43,19 @@ export class InMemorySurveyRepository implements SurveyRepository {
 
   async listForGame(gameId: string): Promise<SurveyResponse[]> {
     return [...this.responses.values()].filter((r) => r.gameId === gameId).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  async getLatestResponseAt(gameId: string): Promise<number | null> {
+    const forGame = await this.listForGame(gameId);
+    return forGame[0]?.createdAt ?? null;
+  }
+
+  async getReadAt(email: string, gameId: string): Promise<number | null> {
+    return this.readAt.get(`${email}:${gameId}`) ?? null;
+  }
+
+  async markRead(email: string, gameId: string, at: number): Promise<void> {
+    this.readAt.set(`${email}:${gameId}`, at);
   }
 }
 
@@ -89,6 +109,48 @@ export class PostgresSurveyRepository implements SurveyRepository {
     } catch (error) {
       console.error(`[db] failed to list survey responses for ${gameId}:`, error);
       return [];
+    }
+  }
+
+  async getLatestResponseAt(gameId: string): Promise<number | null> {
+    const db = getDb();
+    if (!db) return null;
+    try {
+      const rows = await db<{ created_at: Date }[]>`
+        SELECT created_at FROM survey_responses WHERE game_id = ${gameId} ORDER BY created_at DESC LIMIT 1
+      `;
+      return rows[0] ? rows[0].created_at.getTime() : null;
+    } catch (error) {
+      console.error(`[db] failed to read latest survey response time for ${gameId}:`, error);
+      return null;
+    }
+  }
+
+  async getReadAt(email: string, gameId: string): Promise<number | null> {
+    const db = getDb();
+    if (!db) return null;
+    try {
+      const rows = await db<{ read_at: Date }[]>`
+        SELECT read_at FROM feedback_read_at WHERE email = ${email} AND game_id = ${gameId}
+      `;
+      return rows[0] ? rows[0].read_at.getTime() : null;
+    } catch (error) {
+      console.error(`[db] failed to read feedback read time for ${email}/${gameId}:`, error);
+      return null;
+    }
+  }
+
+  async markRead(email: string, gameId: string, at: number): Promise<void> {
+    const db = getDb();
+    if (!db) return;
+    try {
+      await db`
+        INSERT INTO feedback_read_at (email, game_id, read_at)
+        VALUES (${email}, ${gameId}, to_timestamp(${at / 1000}))
+        ON CONFLICT (email, game_id) DO UPDATE SET read_at = EXCLUDED.read_at
+      `;
+    } catch (error) {
+      console.error(`[db] failed to mark feedback read for ${email}/${gameId}:`, error);
     }
   }
 }

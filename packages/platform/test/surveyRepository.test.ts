@@ -62,4 +62,39 @@ describe('InMemorySurveyRepository', () => {
     const second = await repo.submit(response({ answer: 'different text, same (roomId, seat, questionId)' }));
     expect(second).toEqual({ stored: false });
   });
+
+  it('getLatestResponseAt() returns null for a game with no responses at all', async () => {
+    const repo = new InMemorySurveyRepository();
+    expect(await repo.getLatestResponseAt('tashkalar')).toBeNull();
+  });
+
+  it('getLatestResponseAt() returns the newest createdAt across every response for that game', async () => {
+    const repo = new InMemorySurveyRepository();
+    await repo.submit(response({ roomId: 'room-older', questionId: 'fun' }));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const { stored } = await repo.submit(response({ roomId: 'room-newer', questionId: 'fun' }));
+    expect(stored).toBe(true);
+
+    const [latest] = await repo.listForGame('tashkalar');
+    expect(await repo.getLatestResponseAt('tashkalar')).toBe(latest.createdAt);
+  });
+
+  it('getReadAt() returns null until markRead() has been called for that (email, gameId)', async () => {
+    const repo = new InMemorySurveyRepository();
+    expect(await repo.getReadAt('owner@example.com', 'tashkalar')).toBeNull();
+
+    await repo.markRead('owner@example.com', 'tashkalar', 12345);
+    expect(await repo.getReadAt('owner@example.com', 'tashkalar')).toBe(12345);
+  });
+
+  it('markRead() overwrites a previous read time for the same (email, gameId), and keys separately per game', async () => {
+    const repo = new InMemorySurveyRepository();
+    await repo.markRead('owner@example.com', 'tashkalar', 100);
+    await repo.markRead('owner@example.com', 'tashkalar', 200);
+    expect(await repo.getReadAt('owner@example.com', 'tashkalar')).toBe(200);
+
+    await repo.markRead('owner@example.com', 'mint-condition', 999);
+    expect(await repo.getReadAt('owner@example.com', 'tashkalar')).toBe(200);
+    expect(await repo.getReadAt('owner@example.com', 'mint-condition')).toBe(999);
+  });
 });

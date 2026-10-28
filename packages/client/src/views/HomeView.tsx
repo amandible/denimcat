@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GAMES } from '../games/registry';
-import { invalidateSession, loadSessionToken } from '../state/authToken';
+import { invalidateSession, loadIsOwner, loadSessionToken } from '../state/authToken';
+import { fetchUnreadFeedback, type UnreadFeedback } from '../state/feedback';
 import { abandonMyGame, fetchMyGames, formatRelativeAge, myGameUrl, type MyGame } from '../state/myGames';
 import { SERVER_URL } from '../socket';
 
@@ -14,9 +15,14 @@ async function handleSignOut() {
 
 export function HomeView() {
   const [myGames, setMyGames] = useState<MyGame[]>([]);
+  const [unreadFeedback, setUnreadFeedback] = useState<UnreadFeedback[]>([]);
 
   useEffect(() => {
     fetchMyGames().then(setMyGames);
+    // Only the owner can ever see anything from this call (server-enforced
+    // regardless), but skipping it entirely for everyone else avoids a
+    // pointless request on every visit.
+    if (loadIsOwner()) fetchUnreadFeedback().then(setUnreadFeedback);
   }, []);
 
   async function handleAbandon(game: MyGame) {
@@ -43,6 +49,33 @@ export function HomeView() {
         </div>
         <h1 style={{ fontSize: 36, textAlign: 'center' }}>denimcat</h1>
         <p style={{ color: 'var(--muted)', textAlign: 'center', marginTop: 0 }}>Pick a game to play.</p>
+
+        {unreadFeedback.some((g) => g.hasUnread) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
+            <h2 style={{ fontSize: 15, color: 'var(--muted)', margin: 0 }}>Feedback</h2>
+            {unreadFeedback
+              .filter((g) => g.hasUnread)
+              .map((g) => (
+                <a
+                  key={g.gameId}
+                  href={`/${g.gameId}/notes`}
+                  className="panel"
+                  style={{
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 18px',
+                  }}
+                >
+                  <div>{g.displayName}</div>
+                  <strong style={{ color: 'var(--accent)', fontSize: 13 }}>New feedback</strong>
+                </a>
+              ))}
+          </div>
+        )}
 
         {myGames.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>

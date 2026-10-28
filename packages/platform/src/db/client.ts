@@ -86,4 +86,16 @@ export async function ensureSchema(): Promise<void> {
       UNIQUE (room_id, seat, question_id)
     )
   `;
+  // When an account last viewed a game's playtest notes (see NotesView) —
+  // compared against survey_responses.created_at to decide whether a game
+  // has unread feedback. One row per (email, game_id); upserted on every
+  // view, never on submit.
+  await db`
+    CREATE TABLE IF NOT EXISTS feedback_read_at (
+      email TEXT NOT NULL,
+      game_id TEXT NOT NULL,
+      read_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (email, game_id)
+    )
+  `;
 }

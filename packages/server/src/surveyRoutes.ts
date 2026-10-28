@@ -108,5 +108,47 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
     res.json({ ok: true, responses });
   });
 
+  // The home screen's "new feedback" indicator (see NotesView and HomeView):
+  // for every registered game, whether it has a response newer than this
+  // owner last viewed its notes page. Mounted before /:gameId would ever
+  // match "/" with no gameId, so no route-ordering conflict.
+  router.get('/', async (req, res) => {
+    const token = bearerToken(req);
+    if (!token) {
+      res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
+      return;
+    }
+    const session = await authService.checkSession(token);
+    if (!session?.isOwner) {
+      res.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Owner only.' } });
+      return;
+    }
+    const games = await Promise.all(
+      gameStores.map(async ({ module }) => {
+        const [latestAt, readAt] = await Promise.all([
+          surveyRepository.getLatestResponseAt(module.id),
+          surveyRepository.getReadAt(session.email, module.id),
+        ]);
+        return { gameId: module.id, displayName: module.displayName, hasUnread: latestAt !== null && (readAt === null || latestAt > readAt) };
+      }),
+    );
+    res.json({ ok: true, games });
+  });
+
+  router.post('/:gameId/read', async (req, res) => {
+    const token = bearerToken(req);
+    if (!token) {
+      res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
+      return;
+    }
+    const session = await authService.checkSession(token);
+    if (!session?.isOwner) {
+      res.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Owner only.' } });
+      return;
+    }
+    await surveyRepository.markRead(session.email, req.params.gameId, Date.now());
+    res.json({ ok: true });
+  });
+
   return router;
 }

@@ -134,6 +134,19 @@ describe('survey-responses routes', () => {
     }).then((r) => r.json());
   }
 
+  function getUnreadFeedback(token: string | undefined) {
+    return fetch(`${baseUrl}/survey-responses`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => r.json());
+  }
+
+  function markFeedbackRead(token: string | undefined, gameId: string) {
+    return fetch(`${baseUrl}/survey-responses/${gameId}/read`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => r.json());
+  }
+
   describe('POST /survey-responses', () => {
     it('accepts answers from a seat the signed-in account actually holds, once the room is finished', async () => {
       const aliceToken = await signIn('alice@example.com');
@@ -291,6 +304,62 @@ describe('survey-responses routes', () => {
     it('rejects a missing/invalid session', async () => {
       expect((await getSurveyResponses(undefined, 'mint-condition')).ok).toBe(false);
       expect((await getSurveyResponses('garbage', 'mint-condition')).ok).toBe(false);
+    });
+  });
+
+  describe('GET /survey-responses (unread summary across every game)', () => {
+    it('reports hasUnread once a response exists and the owner has never read that game, then false again after marking it read', async () => {
+      const ownerToken = await signIn('owner@example.com');
+      const aliceToken = await signIn('alice@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
+      await finishRoom(created.roomCode);
+
+      const before = await getUnreadFeedback(ownerToken);
+      expect(before.ok).toBe(true);
+      expect(before.games.find((g: { gameId: string }) => g.gameId === 'mint-condition')).toMatchObject({ hasUnread: false });
+
+      await submitSurvey(aliceToken, {
+        gameId: 'mint-condition',
+        roomCode: created.roomCode,
+        seat: 'p1',
+        answers: [{ questionId: 'fun', answer: 'Yes!' }],
+      });
+
+      const afterSubmit = await getUnreadFeedback(ownerToken);
+      expect(afterSubmit.games.find((g: { gameId: string }) => g.gameId === 'mint-condition')).toMatchObject({
+        gameId: 'mint-condition',
+        displayName: 'Mint Condition',
+        hasUnread: true,
+      });
+
+      await markFeedbackRead(ownerToken, 'mint-condition');
+
+      const afterRead = await getUnreadFeedback(ownerToken);
+      expect(afterRead.games.find((g: { gameId: string }) => g.gameId === 'mint-condition')).toMatchObject({ hasUnread: false });
+    });
+
+    it('rejects a signed-in non-owner account', async () => {
+      const aliceToken = await signIn('alice@example.com');
+      expect((await getUnreadFeedback(aliceToken)).ok).toBe(false);
+    });
+
+    it('rejects a missing/invalid session', async () => {
+      expect((await getUnreadFeedback(undefined)).ok).toBe(false);
+      expect((await getUnreadFeedback('garbage')).ok).toBe(false);
+    });
+  });
+
+  describe('POST /survey-responses/:gameId/read', () => {
+    it('rejects a signed-in non-owner account', async () => {
+      const aliceToken = await signIn('alice@example.com');
+      expect((await markFeedbackRead(aliceToken, 'mint-condition')).ok).toBe(false);
+    });
+
+    it('rejects a missing/invalid session', async () => {
+      expect((await markFeedbackRead(undefined, 'mint-condition')).ok).toBe(false);
+      expect((await markFeedbackRead('garbage', 'mint-condition')).ok).toBe(false);
     });
   });
 });
