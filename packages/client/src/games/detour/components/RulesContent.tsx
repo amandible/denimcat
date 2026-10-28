@@ -12,9 +12,9 @@ export function RulesContent() {
       <p>For 2-4 players.</p>
 
       <h4>Components</h4>
-      <p>Neutral cards numbered 1-18. A single shared pawn. A score tracker.</p>
+      <p>Neutral cards numbered 1-16. A single shared pawn. A score tracker.</p>
       <p>
-        Four player decks, each numbered 1-20. Each card has an arrow on it pointing in one of the four
+        Four player decks, each numbered 1-16. Each card has an arrow on it pointing in one of the four
         cardinal directions. One player's deck has an up arrow on the 1, a left arrow on the 2, right on the
         3, and down on the 4, then repeats (up on the 5, etc.) Another player has a left on the 1, right on
         the 2, etc. In this way, each player has a different arrow on the 1, and so on for every number.
@@ -22,8 +22,8 @@ export function RulesContent() {
 
       <h4>Setup</h4>
       <p>
-        Before the game, the neutral cards are dealt out, one per cell, onto the board shown here. The pawn
-        is placed on the neutral 18.
+        Before the game, the neutral cards are dealt out, one per cell, onto the 4x4 board shown here. The
+        pawn is placed on the neutral 16.
       </p>
       <p>
         Each player takes a different personal deck (chosen at random) and draws three cards. (At 2 or 3
@@ -32,17 +32,18 @@ export function RulesContent() {
 
       <h4>Turns</h4>
       <p>
-        Each turn a player will play a card and then (if possible) draw a card. The game ends after 20
+        Each turn a player will play a card and then (if possible) draw a card. The game ends after 16
         turns, when all cards have been played.
       </p>
       <p>
         On a player's turn, they choose a card from their hand and play it onto a lower-numbered card
         (neutral or any player's) that does not contain the pawn. They then move the pawn one space in the
-        direction indicated by the card they've just played. If that caused the pawn to move onto a card of
-        the active player's color, then they gain a point and the pawn moves again in the direction
-        indicated by the card it is now on. This continues until the pawn either moves onto a card that does
-        not belong to the active player, tries to move off the board, or tries to move onto a card it has
-        already moved onto this turn.
+        direction indicated by the card they've just played. The board wraps around at every edge, so a move
+        off one side re-enters from the opposite side of the same row or column instead of being blocked. If
+        that caused the pawn to move onto a card of the active player's color, then they gain a point and
+        the pawn moves again in the direction indicated by the card it is now on. This continues until the
+        pawn either moves onto a card that does not belong to the active player, or tries to move onto a
+        card it has already moved onto this turn.
       </p>
       <p>
         If a card has no legal (lower-numbered) target anywhere on the board, it becomes wild for that play:

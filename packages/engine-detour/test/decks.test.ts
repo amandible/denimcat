@@ -10,7 +10,7 @@ describe('directionFor', () => {
     expect(directionFor('A', 5)).toBe('up'); // repeats
   });
   it('each deck is a one-step rotation of the last, and all four differ on every card number', () => {
-    for (let value = 1; value <= 20; value++) {
+    for (let value = 1; value <= 16; value++) {
       const directions = (['A', 'B', 'C', 'D'] as const).map((deck) => directionFor(deck, value));
       expect(new Set(directions).size).toBe(4);
     }

@@ -15,7 +15,7 @@ export function resolveChain(
 
   while (true) {
     const next = cellInDirection(current, direction);
-    if (next === null || visited.has(next)) break;
+    if (visited.has(next)) break;
     current = next;
     visited.add(current);
     const cell = state.cells[current];

@@ -42,7 +42,7 @@ describe('playCard', () => {
       for (const value of [1, 2, 3]) {
         const state = makeState({
           activeSeat: 'p1',
-          pawnCell: '3-4',
+          pawnCell: '3-3',
           players: { p1: { hand: [value], deck: [], deckId: 'A' } },
         });
         const result = playCard(state, 'p1', value, '0-0');

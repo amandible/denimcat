@@ -3,6 +3,16 @@
 **Spec source:** `design/detour/rules.md` (Alison's own design), clarified
 through conversation on 2026-10-28.
 
+**Revision (2026-10-28, post-playtest):** a hotseat test surfaced two
+problems — the pawn getting stuck on edges often, and games running a
+little long. Alison's fix, folded into the sections below: shrink the
+board to a 4x4 square (16 cells), shrink the neutral deck and all four
+player decks to 16 cards each (1-16, matching the cell count), and make
+the pawn wrap around the board edges (a torus) instead of stopping
+there. The wrap eliminates the old "off-board" chain-stop case entirely
+— a chain now stops only two ways: landing on a card that isn't the
+active player's, or re-entering a cell already visited this chain.
+
 ## Intent
 
 Detour is a new 2-4 player game for the denimcat platform, designed by
@@ -47,29 +57,31 @@ considered or is worth considering.
 
 ### Components
 
-- 18 neutral cards, numbered 1-18.
-- Four player decks, each 20 cards (1-20). Every card has one of four
+- 16 neutral cards, numbered 1-16.
+- Four player decks, each 16 cards (1-16). Every card has one of four
   cardinal arrows. All four decks share the same underlying cycle,
   [up, left, right, down] repeating every 4 cards (card 1=up, 2=left,
   3=right, 4=down, 5=up, ...) — but each deck starts the cycle rotated
   one step further than the last: deck A = [up,left,right,down] repeating,
   deck B = [left,right,down,up] repeating, deck C = [right,down,up,left]
   repeating, deck D = [down,up,left,right] repeating. Confirmed with
-  Alison: for any given number 1-20, each of the four decks has a
+  Alison: for any given number 1-16, each of the four decks has a
   different arrow on it.
 - A single shared pawn.
 - A score tracker (one running number per player — see Scoring below).
 
 ### Board
 
-A 5-column × 4-row rectangular grid, minus the top-right and bottom-left
-cells — 18 cells, standard orthogonal (rook-wise) adjacency for
-up/down/left/right. Confirmed with Alison; this is a fixed shape
-regardless of player count.
+A 4-column × 4-row square grid, 16 cells, standard orthogonal (rook-wise)
+adjacency for up/down/left/right — **and the board wraps at every edge
+(a torus)**: moving off one side re-enters from the opposite side of the
+same row or column (revised post-playtest; see Pawn movement and
+chaining below). Confirmed with Alison; this is a fixed shape regardless
+of player count.
 
-Before the game, the 18 neutral cards are shuffled and dealt face-up, one
-per cell, filling the 18-cell board in random position. The pawn starts
-wherever card 18 landed.
+Before the game, the 16 neutral cards are shuffled and dealt face-up, one
+per cell, filling the 16-cell board in random position. The pawn starts
+wherever card 16 landed.
 
 ### Player count and deck assignment
 
@@ -86,12 +98,12 @@ a sub-4-player game is simply never dealt from, drawn from, or referenced
 ### Turn structure
 
 Each player starts with 3 cards in hand, dealt randomly from their own
-(shuffled) 20-card deck. On a turn: play one card from hand onto any
+(shuffled) 16-card deck. On a turn: play one card from hand onto any
 board cell *other than the one the pawn currently occupies* whose current
 top card has a strictly lower number, covering what was there; then draw
 one card if their deck isn't empty (no fixed hand cap). Over a player's
-20 individual turns they play all 20 of their own cards and draw 17 times
-(starting hand 3 + 17 draws = 20 played), so the deck empties with
+16 individual turns they play all 16 of their own cards and draw 13 times
+(starting hand 3 + 13 draws = 16 played), so the deck empties with
 exactly 3 turns left where a play happens with no following draw. The
 game ends once every seated player's hand (and deck) is empty — which
 happens for everyone at once, since every seated player takes the same
@@ -127,16 +139,18 @@ card came from), they score a point and the pawn moves again, this time
 following the direction on the card it just landed on — chaining for as
 long as each successive landing is on the active player's own card. The
 chain stops the moment it lands on a card that isn't the active player's
-(neutral or another player's), or the moment a move (the first one or any
-chain continuation) would take the pawn off the 18-cell board.
+(neutral or another player's), or (see below) the moment it would
+re-enter a cell already visited this chain.
 
-**Off-board moves are legal, not illegal** — confirmed with Alison: if a
-move would leave the board, the pawn simply doesn't move that step and
-the sequence ends there (no point for that step, but any points already
-scored earlier in the same chain still count). This applies the same way
-whether it's the very first move after playing a card or a later chain
-continuation — a player can legally play a card whose arrow points off
-the board on the first step; it just scores nothing that turn.
+**The board wraps at every edge — a torus, revised post-playtest** — a
+move off one side of the 4x4 board re-enters from the opposite side of
+the same row or column, independently for rows and columns (so a move
+off a corner wraps both axes at once). This replaces the original
+design's "off-board moves are legal but stop the chain" rule: every move
+now always lands on a real cell, so there is no off-board case left to
+handle, for the first move after playing a card or any chain
+continuation. The fix was chosen specifically to stop the pawn getting
+stuck near edges, which the original fixed-boundary board made common.
 
 **Chain loops are prevented by a once-per-turn visit rule** — confirmed
 with Alison, in response to a reviewer-surfaced gap: two of a player's
@@ -145,8 +159,8 @@ otherwise chain forever. The pawn may not enter the same cell twice
 within a single chain (i.e. within one played card's resulting sequence
 of moves) — if the next move would land on a cell already visited earlier
 in this same chain, the chain stops there instead (same treatment as
-landing on a non-owned card or trying to leave the board: no point for
-that step, but earlier points in the chain still count).
+landing on a non-owned card: no point for that step, but earlier points
+in the chain still count).
 
 ### Scoring
 
@@ -166,18 +180,17 @@ highest wins.
   as the rest of the platform (seat order, `p1` first) unless the
   implementer finds a reason to do otherwise.
 - **Personal deck shuffle.** The rules say "draw a card" without stating
-  draw order explicitly; treat each player's 20-card deck as shuffled at
+  draw order explicitly; treat each player's 16-card deck as shuffled at
   deal time (consistent with every other game's "deck" concept here,
-  e.g. Mint Condition's money deck) rather than drawn in fixed 1-20
+  e.g. Mint Condition's money deck) rather than drawn in fixed 1-16
   order.
 - **Display/naming conventions** (score panel, recap, chat, log
   substitution for the engine's raw seat-id log text, feedback) — already
   fully specified by the existing platform convention; see
   `docs/adding-a-new-game.md` and the `playerLabel`/`substituteSeatTokens`
   helpers. No new design decision needed here.
-- **Rules-dialog text** — transcribe close to `design/detour/rules.md`'s
-  own wording (per Alison's established preference, see
-  `RulesContent.tsx` in any existing game), not a rewrite.
-- **Game/landing-page tagline** — Alison's own words; use
-  `TODO: Detour description` until she supplies one, same as every other
-  game's placeholder convention.
+- **Rules-dialog text** — superseded after launch: Alison asked the panel
+  to track this design doc's resolved rules directly, rather than
+  transcribing `design/detour/rules.md`'s wording.
+- **Game/landing-page tagline** — Alison's own words; now set to "Cards +
+  arrows - first draft".

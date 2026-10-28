@@ -4,9 +4,9 @@ import type { CellState, GameState, PlayerState, SeatId } from '../src/types';
 
 /**
  * Every cell defaults to a uniform high sentinel (99), not a realistic
- * 1-18 neutral deal — so a test overriding only the one or two cells it
+ * 1-16 neutral deal — so a test overriding only the one or two cells it
  * cares about can reason exactly about what hasLegalTarget/isLegalPlacement/
- * resolveChain will see, without the other 16-17 cells' values silently
+ * resolveChain will see, without the other 14-15 cells' values silently
  * affecting the result.
  */
 function defaultCells(): Record<CellId, CellState> {
@@ -43,7 +43,7 @@ export function makeState(
     seats,
     players,
     cells: { ...defaultCells(), ...overrides.cells },
-    pawnCell: overrides.pawnCell ?? '3-4',
+    pawnCell: overrides.pawnCell ?? '3-3',
     activeSeat: overrides.activeSeat ?? 'p1',
     phase: overrides.phase ?? 'playing',
     winner: overrides.winner ?? null,

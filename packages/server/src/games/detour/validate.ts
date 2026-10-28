@@ -7,14 +7,14 @@ import { BOARD_CELLS } from '@denimcat/engine-detour';
  */
 
 export function isCardValue(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 20;
+  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 16;
 }
 
 /**
  * Checks membership in the engine's own BOARD_CELLS rather than matching a
  * locally-reimplemented shape regex — a "row-col" string that LOOKS
- * well-formed (e.g. "0-4" or "3-0") can still name one of the two corners
- * the board doesn't actually have, which isLegalPlacement defends against
+ * well-formed (e.g. "0-4" or "4-0") can still name a row/column index past
+ * this board's 4x4 edges, which isLegalPlacement defends against
  * independently, but rejecting it here too means a malformed target never
  * reaches the engine as a confusing INTERNAL_ERROR in the first place.
  */

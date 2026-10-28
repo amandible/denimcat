@@ -25,10 +25,17 @@ describe('resolveChain', () => {
     expect(result).toEqual({ pawnCell: '0-1', pointsScored: 1 });
   });
 
-  it('stops without moving when the first step would leave the board, scoring nothing', () => {
-    const state = makeState({ pawnCell: '0-0' });
+  it('wraps around the board edge instead of stopping there, scoring if the wrapped-to cell is the active player\'s own', () => {
+    const state = makeState({
+      pawnCell: '0-0',
+      players: { p1: { deckId: 'A' } },
+      cells: { '3-0': { value: 2, owner: 'p1' } }, // directly "above" 0-0 via wraparound
+    });
     const result = resolveChain(state, 'p1', 'up');
-    expect(result).toEqual({ pawnCell: '0-0', pointsScored: 0 });
+    // 0-0 -> up wraps to 3-0 (p1's own, +1 point) -> direction becomes
+    // directionFor('A', 2) = 'left' -> wraps from 3-0 to 3-3, the
+    // 99-sentinel neutral default -> chain stops there.
+    expect(result).toEqual({ pawnCell: '3-3', pointsScored: 1 });
   });
 
   it('a chain may legally return to the pawn\'s OWN starting cell (not "visited" until actually moved onto this turn), scoring once and then stopping there since that cell is neutral by default', () => {

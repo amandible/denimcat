@@ -42,7 +42,7 @@ export function Board({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(5, ${CELL_SIZE}px)`,
+          gridTemplateColumns: `repeat(4, ${CELL_SIZE}px)`,
           gridTemplateRows: `repeat(4, ${CELL_SIZE}px)`,
           gap: CELL_GAP,
         }}

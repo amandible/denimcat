@@ -10,20 +10,20 @@ export function dealGame(playerCount: PlayerCount, rng: () => number = Math.rand
   const seats = ALL_SEATS.slice(0, playerCount);
 
   const shuffledValues = shuffle(
-    Array.from({ length: 18 }, (_, i) => i + 1),
+    Array.from({ length: 16 }, (_, i) => i + 1),
     rng,
   );
   const cells = {} as Record<CellId, CellState>;
   BOARD_CELLS.forEach((cellId, i) => {
     cells[cellId] = { value: shuffledValues[i], owner: 'neutral' };
   });
-  const pawnCell = BOARD_CELLS.find((cellId) => cells[cellId].value === 18)!;
+  const pawnCell = BOARD_CELLS.find((cellId) => cells[cellId].value === 16)!;
 
   const deckIds = shuffle(ALL_DECKS, rng).slice(0, playerCount);
   const players = {} as Record<SeatId, PlayerState>;
   seats.forEach((seat, i) => {
     const deckValues = shuffle(
-      Array.from({ length: 20 }, (_, v) => v + 1),
+      Array.from({ length: 16 }, (_, v) => v + 1),
       rng,
     );
     players[seat] = {
