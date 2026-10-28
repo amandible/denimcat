@@ -1020,6 +1020,60 @@ describe('RoomStore.sendChatMessage', () => {
     store.stop();
   });
 
+  it(
+    "prefers the seat's per-room join name over the passed-in senderName (the account's Settings " +
+      'display name) when the two differ — a player who typed a one-off name at join time, with no ' +
+      'account display name set (or a different one), should still be recognizable in chat under the ' +
+      "name they actually gave for THIS game, not a stale/absent account-level name",
+    async () => {
+      const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+      const store = new RoomStore(makeModule(), repo, fakeNamespace());
+      const created = await store.createRoom(undefined);
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Bob');
+
+      // 'Robert' simulates a differing (or the socket's real) account
+      // display name passed in by the caller — the room's own knownNames
+      // ('Bob', given at join) must win.
+      await store.sendChatMessage(created.roomCode, 'socket-1', 'hello', 0, 'Robert');
+
+      const info = await store.getRoomInfo(created.roomCode);
+      expect(info?.chatMessages[0]).toMatchObject({ name: 'Bob' });
+      store.stop();
+    },
+  );
+
+  it('falls back to the passed-in senderName when the seat has no per-room join name on file', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store.joinRoom(created.roomCode, 'p1', 'socket-1'); // no name given at join
+
+    await store.sendChatMessage(created.roomCode, 'socket-1', 'hello', 0, 'Robert');
+
+    const info = await store.getRoomInfo(created.roomCode);
+    expect(info?.chatMessages[0]).toMatchObject({ name: 'Robert' });
+    store.stop();
+  });
+
+  it('a spectator (no seat, so no per-room name is possible) always uses the passed-in senderName', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await store.joinRoom(created.roomCode, 'spectator', 'socket-1');
+
+    await store.sendChatMessage(created.roomCode, 'socket-1', 'hello', 0, 'Robert');
+
+    const info = await store.getRoomInfo(created.roomCode);
+    expect(info?.chatMessages[0]).toMatchObject({ name: 'Robert' });
+    store.stop();
+  });
+
   it('rejects a chat message from a socket not bound to that room', async () => {
     const repo = new InMemoryRoomRepository<TestState, TestSeat>();
     const store = new RoomStore(makeModule(), repo, fakeNamespace());

@@ -5,6 +5,8 @@ import { STANDARD_SURVEY_QUESTIONS } from '@denimcat/shared';
 import type { GameStoreEntry } from './myGamesRoutes';
 
 const MAX_ANSWER_LENGTH = 2000;
+/** Matches MAX_NAME_LENGTH in roomHandlers.ts — a position label is display text in the same class as a player name. */
+const MAX_POSITION_LABEL_LENGTH = 40;
 const QUESTION_IDS = new Set(STANDARD_SURVEY_QUESTIONS.map((q) => q.id));
 
 function bearerToken(req: { headers: { authorization?: string } }): string | null {
@@ -42,8 +44,17 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
     const gameId = req.body?.gameId;
     const roomCode = req.body?.roomCode;
     const seat = req.body?.seat;
+    const positionLabel = req.body?.positionLabel;
     const answers = req.body?.answers;
-    if (!token || !isNonEmptyString(gameId) || !isNonEmptyString(roomCode) || !isNonEmptyString(seat) || !isValidAnswers(answers)) {
+    if (
+      !token ||
+      !isNonEmptyString(gameId) ||
+      !isNonEmptyString(roomCode) ||
+      !isNonEmptyString(seat) ||
+      !isNonEmptyString(positionLabel) ||
+      positionLabel.length > MAX_POSITION_LABEL_LENGTH ||
+      !isValidAnswers(answers)
+    ) {
       res.json({ ok: false, error: { code: 'INVALID_PAYLOAD', message: 'Malformed request.' } });
       return;
     }
@@ -71,6 +82,9 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
       return;
     }
 
+    // Sourced from the room's own durable record, never from the client —
+    // same reason reconnect identity is never client-supplied either.
+    const playerName = room.knownNames[seat];
     const results = await Promise.all(
       answers.map(async (a) => {
         const { stored } = await surveyRepository.submit({
@@ -79,6 +93,8 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
           roomCode: room.code,
           seat,
           accountEmail: session.email,
+          positionLabel,
+          playerName,
           questionId: a.questionId,
           answer: a.answer.trim(),
         });

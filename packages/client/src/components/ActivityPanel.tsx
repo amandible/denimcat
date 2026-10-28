@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { ChatMessage } from '@denimcat/shared';
+import { playerLabel } from '../playerLabel';
 
 type ActivityItem = { kind: 'log'; key: string; text: string } | { kind: 'chat'; key: string; message: ChatMessage };
 
@@ -55,6 +56,7 @@ export function ActivityPanel({
   log: string[];
   chatMessages: ChatMessage[];
   onSend: (text: string) => void;
+  /** Resolves a seat to its POSITION label only (e.g. "Red", "Player 1") — never a player's name. This component combines it with `message.name` itself via playerLabel, so passing an already-name-combined label here would double it up. */
   seatLabel: (seat: string) => string;
   /** Overrides how a plain log line renders. Defaults to plain text. */
   renderLogText?: (text: string) => ReactNode;
@@ -81,7 +83,7 @@ export function ActivityPanel({
               <li key={item.key}>{renderLogText ? renderLogText(item.text) : item.text}</li>
             ) : (
               <li key={item.key} style={{ listStyle: 'none', marginLeft: -16 }}>
-                <strong>{item.message.name ?? (item.message.seat === 'spectator' ? 'Spectator' : seatLabel(item.message.seat))}:</strong>{' '}
+                <strong>{playerLabel(item.message.name, item.message.seat === 'spectator' ? 'Spectator' : seatLabel(item.message.seat))}:</strong>{' '}
                 {item.message.text}
               </li>
             ),

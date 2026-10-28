@@ -32,6 +32,23 @@ export interface SurveyResponse {
   roomCode: string;
   seat: string;
   accountEmail: string;
+  /**
+   * The seat's resolved position label at submission time (e.g. "Red",
+   * "Sylvan", "Player 1") — captured as plain text rather than resolved
+   * later from the seat id, since by the time someone reads old feedback
+   * the room it came from may well have been swept (see RoomStore's idle
+   * sweep), and even while the room still exists, position labels are a
+   * client-only display concept the server has no way to re-derive from a
+   * bare seat id. Combine with playerName via playerLabel when rendering.
+   */
+  positionLabel: string;
+  /**
+   * The account's display name at submission time, or absent if none was
+   * ever set — filled in server-side from the room's own durable record
+   * (PersistedRoom.knownNames), never trusted from the client, for the
+   * same reason reconnect identity is never client-supplied either.
+   */
+  playerName?: string;
   questionId: string;
   answer: string;
   createdAt: number;

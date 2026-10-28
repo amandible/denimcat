@@ -14,6 +14,7 @@ import { RulesContent } from './components/RulesContent';
 import { RulesModal } from '../../components/RulesModal';
 import { ActivityPanel } from '../../components/ActivityPanel';
 import { RecapPanel } from '../../components/RecapPanel';
+import { playerLabel, substituteSeatTokens } from '../../playerLabel';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: MintConditionConnection }) {
@@ -36,6 +37,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   const isMyTurn = !!mySeat && gameState.phase === 'auction-active' && gameState.auction.activeSeat === mySeat;
   const isWinner = !!mySeat && gameState.auction.winnerSeat === mySeat;
   const myHand = mySeat ? gameState.players[mySeat].hand ?? [] : [];
+  // Combines a seat's position label with its player-supplied name (see
+  // playerLabel's doc comment) — used anywhere a seat's identity is shown
+  // to a viewer, so a name set in Settings actually shows up instead of
+  // always reading "Player 1".
+  const displayLabel = (seat: SeatId): string => playerLabel(connection.roomInfo?.seats[seat]?.name, seatLabel(seat));
+  const displayLog = gameState.log.map((line) => substituteSeatTokens(line, gameState.seats, (seat) => displayLabel(seat as SeatId)));
 
   // Both post-auction choices (which prize to take, where to place the new
   // one) now act directly on the main board's own PriceSlotTrack instead of
@@ -81,7 +88,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           onPlaceInSlot={showingPlacement ? (slotIndex) => connection.placeNewPrize(slotIndex) : undefined}
         />
         <div style={{ marginTop: 16 }}>
-          <AuctionStatusPanel auction={gameState.auction} />
+          <AuctionStatusPanel auction={gameState.auction} displayLabel={displayLabel} />
         </div>
         <p style={{ color: 'var(--muted)', fontSize: 13 }}>Prizes left to reveal: {gameState.prizeDeckCount}</p>
       </div>
@@ -94,7 +101,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           )}
         </p>
 
-        <PlayerCounts state={gameState} />
+        <PlayerCounts state={gameState} displayLabel={displayLabel} />
 
         {mySeat && <YourHand hand={myHand} />}
 
@@ -130,7 +137,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         )}
 
         <div style={{ marginTop: 16 }}>
-          <ScoreBoard state={gameState} />
+          <ScoreBoard state={gameState} displayLabel={displayLabel} />
         </div>
 
         {gameState.phase === 'ended' && (
@@ -139,11 +146,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
               gameId="mint-condition"
               roomCode={roomCode}
               mySeat={mySeat}
+              myPositionLabel={mySeat ? seatLabel(mySeat) : undefined}
               resultSummary={
                 <p style={{ margin: 0 }}>
                   {gameState.winner && gameState.winner.length > 1
-                    ? `Shared win: ${gameState.winner.map(seatLabel).join(' & ')}!`
-                    : `${gameState.winner ? seatLabel(gameState.winner[0]) : ''} wins!`}
+                    ? `Shared win: ${gameState.winner.map(displayLabel).join(' & ')}!`
+                    : `${gameState.winner ? displayLabel(gameState.winner[0]) : ''} wins!`}
                 </p>
               }
             />
@@ -152,7 +160,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
 
         <div style={{ marginTop: 16 }}>
           <ActivityPanel
-            log={gameState.log}
+            log={displayLog}
             chatMessages={connection.roomInfo?.chatMessages ?? []}
             onSend={(text) => connection.sendAction('send_chat', { text, afterLogIndex: gameState.log.length })}
             seatLabel={seatLabel as (seat: string) => string}

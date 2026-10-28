@@ -8,6 +8,7 @@ function response(overrides: Partial<Omit<SurveyResponse, 'createdAt'>> = {}): O
     roomCode: 'ABCD',
     seat: 'red',
     accountEmail: 'alice@example.com',
+    positionLabel: 'Sylvan',
     questionId: 'fun',
     answer: 'It was great!',
     ...overrides,
@@ -52,6 +53,19 @@ describe('InMemorySurveyRepository', () => {
     const found = await repo.listForGame('tashkalar');
     expect(found).toHaveLength(1);
     expect(found[0].answer).toBe('first answer');
+  });
+
+  it('round-trips positionLabel always, and playerName only when given', async () => {
+    const repo = new InMemorySurveyRepository();
+    await repo.submit(response({ roomId: 'room-named', positionLabel: 'Red', playerName: 'Alice' }));
+    await repo.submit(response({ roomId: 'room-unnamed', positionLabel: 'Blue' }));
+
+    const found = await repo.listForGame('tashkalar');
+    const named = found.find((r) => r.roomId === 'room-named')!;
+    const unnamed = found.find((r) => r.roomId === 'room-unnamed')!;
+    expect(named).toMatchObject({ positionLabel: 'Red', playerName: 'Alice' });
+    expect(unnamed.positionLabel).toBe('Blue');
+    expect(unnamed.playerName).toBeUndefined();
   });
 
   it('submit() reports whether it actually stored a new row — true the first time, false on a later duplicate', async () => {

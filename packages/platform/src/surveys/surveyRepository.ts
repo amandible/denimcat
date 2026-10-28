@@ -78,8 +78,8 @@ export class PostgresSurveyRepository implements SurveyRepository {
     // insert actually happened — a conflicted (already-answered) write
     // returns zero rows, which is exactly the "stored: false" signal above.
     const rows = await db`
-      INSERT INTO survey_responses (game_id, room_id, room_code, seat, account_email, question_id, answer)
-      VALUES (${response.gameId}, ${response.roomId}, ${response.roomCode}, ${response.seat}, ${response.accountEmail}, ${response.questionId}, ${response.answer})
+      INSERT INTO survey_responses (game_id, room_id, room_code, seat, account_email, position_label, player_name, question_id, answer)
+      VALUES (${response.gameId}, ${response.roomId}, ${response.roomCode}, ${response.seat}, ${response.accountEmail}, ${response.positionLabel}, ${response.playerName ?? null}, ${response.questionId}, ${response.answer})
       ON CONFLICT (room_id, seat, question_id) DO NOTHING
       RETURNING id
     `;
@@ -91,9 +91,20 @@ export class PostgresSurveyRepository implements SurveyRepository {
     if (!db) return [];
     try {
       const rows = await db<
-        { game_id: string; room_id: string; room_code: string; seat: string; account_email: string; question_id: string; answer: string; created_at: Date }[]
+        {
+          game_id: string;
+          room_id: string;
+          room_code: string;
+          seat: string;
+          account_email: string;
+          position_label: string | null;
+          player_name: string | null;
+          question_id: string;
+          answer: string;
+          created_at: Date;
+        }[]
       >`
-        SELECT game_id, room_id, room_code, seat, account_email, question_id, answer, created_at
+        SELECT game_id, room_id, room_code, seat, account_email, position_label, player_name, question_id, answer, created_at
         FROM survey_responses WHERE game_id = ${gameId} ORDER BY created_at DESC
       `;
       return rows.map((row) => ({
@@ -102,6 +113,10 @@ export class PostgresSurveyRepository implements SurveyRepository {
         roomCode: row.room_code,
         seat: row.seat,
         accountEmail: row.account_email,
+        // Falls back to the raw seat id only for a row written before
+        // position_label existed — every new submission always supplies one.
+        positionLabel: row.position_label ?? row.seat,
+        playerName: row.player_name ?? undefined,
         questionId: row.question_id,
         answer: row.answer,
         createdAt: row.created_at.getTime(),

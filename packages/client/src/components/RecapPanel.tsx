@@ -37,12 +37,15 @@ export function RecapPanel({
   gameId,
   roomCode,
   mySeat,
+  /** My seat's resolved position label (e.g. "Red", "Sylvan", "Player 1") at submission time — see SurveyResponse.positionLabel's doc comment for why this is captured as plain text rather than resolved later. Required whenever `mySeat` is set (the only case it's ever actually sent). */
+  myPositionLabel,
   resultSummary,
 }: {
   gameId: string;
   roomCode: string;
   /** Null/omitted for a spectator — resultSummary still shows, but no form. */
   mySeat?: string | null;
+  myPositionLabel?: string;
   resultSummary: ReactNode;
 }) {
   const [state, setState] = useState<SubmitState>({ kind: 'idle' });
@@ -50,7 +53,7 @@ export function RecapPanel({
   const [saving, setSaving] = useState(false);
 
   async function submit() {
-    if (!mySeat) return;
+    if (!mySeat || !myPositionLabel) return;
     const answers = STANDARD_SURVEY_QUESTIONS.map((q) => ({ questionId: q.id, answer: (drafts[q.id] ?? '').trim() })).filter(
       (a) => a.answer.length > 0,
     );
@@ -68,7 +71,7 @@ export function RecapPanel({
       const res = await fetch(`${SERVER_URL}/survey-responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ gameId, roomCode, seat: mySeat, answers }),
+        body: JSON.stringify({ gameId, roomCode, seat: mySeat, positionLabel: myPositionLabel, answers }),
       });
       const data: { ok: true; alreadyAnswered: string[] } | { ok: false } = await res.json();
       if (!data.ok) {

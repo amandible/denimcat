@@ -159,13 +159,72 @@ describe('survey-responses routes', () => {
         gameId: 'mint-condition',
         roomCode: created.roomCode,
         seat: 'p1',
+        positionLabel: 'Player 1',
         answers: [{ questionId: 'fun', answer: 'Yes!' }],
       });
       expect(result).toEqual({ ok: true, alreadyAnswered: [] });
 
       const stored = await surveyRepository.listForGame('mint-condition');
       expect(stored).toHaveLength(1);
-      expect(stored[0]).toMatchObject({ seat: 'p1', accountEmail: 'alice@example.com', questionId: 'fun', answer: 'Yes!', roomCode: created.roomCode });
+      expect(stored[0]).toMatchObject({
+        seat: 'p1',
+        accountEmail: 'alice@example.com',
+        positionLabel: 'Player 1',
+        questionId: 'fun',
+        answer: 'Yes!',
+        roomCode: created.roomCode,
+      });
+    });
+
+    it("fills playerName server-side from the room's own durable record, never from client input", async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1', name: 'Alice' });
+      await finishRoom(created.roomCode);
+
+      await submitSurvey(aliceToken, {
+        gameId: 'mint-condition',
+        roomCode: created.roomCode,
+        seat: 'p1',
+        positionLabel: 'Player 1',
+        answers: [{ questionId: 'fun', answer: 'Yes!' }],
+      });
+
+      const stored = await surveyRepository.listForGame('mint-condition');
+      expect(stored[0]).toMatchObject({ playerName: 'Alice' });
+    });
+
+    it('leaves playerName undefined when the seat was never given a display name', async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
+      await finishRoom(created.roomCode);
+
+      await submitSurvey(aliceToken, {
+        gameId: 'mint-condition',
+        roomCode: created.roomCode,
+        seat: 'p1',
+        positionLabel: 'Player 1',
+        answers: [{ questionId: 'fun', answer: 'Yes!' }],
+      });
+
+      const stored = await surveyRepository.listForGame('mint-condition');
+      expect(stored[0].playerName).toBeUndefined();
+    });
+
+    it('rejects a missing or overlong positionLabel', async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
+      await finishRoom(created.roomCode);
+
+      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1', answers: [{ questionId: 'fun', answer: 'x' }] };
+      expect((await submitSurvey(aliceToken, base)).ok).toBe(false); // missing entirely
+      expect((await submitSurvey(aliceToken, { ...base, positionLabel: '' })).ok).toBe(false);
+      expect((await submitSurvey(aliceToken, { ...base, positionLabel: 'x'.repeat(100) })).ok).toBe(false);
     });
 
     it('rejects a room that is not yet finished', async () => {
@@ -214,6 +273,7 @@ describe('survey-responses routes', () => {
         gameId: 'mint-condition',
         roomCode: created.roomCode,
         seat: 'p1',
+        positionLabel: 'Player 1',
         answers: [{ questionId: 'not-a-real-question', answer: 'x' }],
       });
       expect(result.ok).toBe(false);
@@ -226,7 +286,7 @@ describe('survey-responses routes', () => {
       await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
       await finishRoom(created.roomCode);
 
-      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1' };
+      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1', positionLabel: 'Player 1' };
       expect((await submitSurvey(undefined, { ...base, answers: [{ questionId: 'fun', answer: 'x' }] })).ok).toBe(false);
       expect((await submitSurvey(aliceToken, { ...base, answers: [] })).ok).toBe(false); // empty answers
       expect((await submitSurvey(aliceToken, base)).ok).toBe(false); // missing answers entirely
@@ -239,7 +299,7 @@ describe('survey-responses routes', () => {
       await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
       await finishRoom(created.roomCode);
 
-      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1' };
+      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1', positionLabel: 'Player 1' };
       expect(await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'first' }] })).toEqual({ ok: true, alreadyAnswered: [] });
       expect(await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'second' }] })).toEqual({
         ok: true,
@@ -258,7 +318,7 @@ describe('survey-responses routes', () => {
       await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
       await finishRoom(created.roomCode);
 
-      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1' };
+      const base = { gameId: 'mint-condition', roomCode: created.roomCode, seat: 'p1', positionLabel: 'Player 1' };
       await submitSurvey(aliceToken, { ...base, answers: [{ questionId: 'fun', answer: 'first' }] });
 
       // Resubmitting 'fun' (already on file) alongside 'not-fun' (new) — the
@@ -286,6 +346,7 @@ describe('survey-responses routes', () => {
         gameId: 'mint-condition',
         roomCode: created.roomCode,
         seat: 'p1',
+        positionLabel: 'Player 1',
         answers: [{ questionId: 'fun', answer: 'Yes!' }],
       });
 
@@ -324,6 +385,7 @@ describe('survey-responses routes', () => {
         gameId: 'mint-condition',
         roomCode: created.roomCode,
         seat: 'p1',
+        positionLabel: 'Player 1',
         answers: [{ questionId: 'fun', answer: 'Yes!' }],
       });
 

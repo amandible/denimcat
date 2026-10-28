@@ -9,6 +9,7 @@ import { RulesContent } from './components/RulesContent';
 import { RulesModal } from '../../components/RulesModal';
 import { ActivityPanel } from '../../components/ActivityPanel';
 import { RecapPanel } from '../../components/RecapPanel';
+import { playerLabel, substituteSeatTokens } from '../../playerLabel';
 import { seatLabel } from './seats';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: LoveTrianglesConnection }) {
@@ -31,6 +32,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
   const isMyTurn = !!mySeat && gameState.phase === 'playing' && gameState.activeSeat === mySeat && !animating;
+  // Combines a seat's position label with its player-supplied name (see
+  // playerLabel's doc comment) — used anywhere a seat's identity is shown
+  // to a viewer, so a name set in Settings actually shows up instead of
+  // always reading "Player 1".
+  const displayLabel = (seat: SeatId): string => playerLabel(connection.roomInfo?.seats[seat]?.name, seatLabel(seat));
+  const displayLog = gameState.log.map((line) => substituteSeatTokens(line, gameState.seats, (seat) => displayLabel(seat as SeatId)));
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px', display: 'flex', gap: 28, flexWrap: 'wrap' }}>
@@ -62,7 +69,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         <p style={{ marginTop: 0 }}>
           You are <strong>{you.role === 'spectator' ? 'a spectator' : seatLabel(mySeat as SeatId)}</strong>
           {mySeat && gameState.phase === 'playing' && (
-            <> — {isMyTurn ? "it's your turn" : `waiting on ${seatLabel(gameState.activeSeat)}`}</>
+            <> — {isMyTurn ? "it's your turn" : `waiting on ${displayLabel(gameState.activeSeat)}`}</>
           )}
         </p>
 
@@ -70,7 +77,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {gameState.seats.map((seat) => (
             <li key={seat} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-              <span>{seatLabel(seat)}</span>
+              <span>{displayLabel(seat)}</span>
               <strong>{gameState.players[seat].gems}</strong>
             </li>
           ))}
@@ -92,11 +99,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
               gameId="love-triangles"
               roomCode={roomCode}
               mySeat={mySeat}
+              myPositionLabel={mySeat ? seatLabel(mySeat) : undefined}
               resultSummary={
                 <>
                   <p style={{ margin: 0 }}>
                     {gameState.winner.length > 1 ? 'Shared victory: ' : 'Winner: '}
-                    {gameState.winner.map(seatLabel).join(', ')}
+                    {gameState.winner.map(displayLabel).join(', ')}
                   </p>
                   {(() => {
                     const breakdowns = computeScoreBreakdowns(gameState);
@@ -108,7 +116,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
                           const isWinner = gameState.winner!.includes(seat);
                           return (
                             <li key={seat} style={{ padding: '4px 0', fontWeight: isWinner ? 'bold' : 'normal' }}>
-                              {seatLabel(seat)}: {total} pts
+                              {displayLabel(seat)}: {total} pts
                               <span style={{ color: 'var(--muted)', fontWeight: 'normal' }}>
                                 {' '}
                                 ({loopSize}-node loop{reachable > 0 ? ` + ${reachable} reachable` : ''})
@@ -127,7 +135,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
 
         <div style={{ marginTop: 16 }}>
           <ActivityPanel
-            log={gameState.log}
+            log={displayLog}
             chatMessages={connection.roomInfo?.chatMessages ?? []}
             onSend={(text) => connection.sendAction('send_chat', { text, afterLogIndex: gameState.log.length })}
             seatLabel={seatLabel as (seat: string) => string}

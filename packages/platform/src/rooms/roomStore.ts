@@ -782,10 +782,18 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     if (!binding || binding.code !== code) {
       return { ok: false, error: { code: 'NOT_IN_ROOM', message: 'Not connected to this room.' } };
     }
+    // A seat's own per-room join name (knownNames — see RoomInfo.seats'
+    // doc comment) wins over the account-level Settings display name
+    // passed in as `senderName`: a player may have typed a one-off name
+    // for this game without ever setting one in Settings, and that's the
+    // name they'd expect to be recognized by here. A spectator has no
+    // seat, so no per-room name is possible — senderName (their account
+    // name, if any) is all there is for them.
+    const seatName = binding.role !== 'spectator' ? room.knownNames[binding.role] : undefined;
     const message: ChatMessage = {
       id: nanoid(8),
       seat: binding.role,
-      name: senderName,
+      name: seatName ?? senderName,
       text,
       at: Date.now(),
       afterLogIndex,

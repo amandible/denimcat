@@ -86,6 +86,14 @@ export async function ensureSchema(): Promise<void> {
       UNIQUE (room_id, seat, question_id)
     )
   `;
+  // See SurveyResponse's own doc comments for why these are captured as
+  // plain text at submission time rather than resolved later from the
+  // seat id — nullable since rows written before this column existed have
+  // neither (surveyRepository.ts's Postgres listForGame falls back to the
+  // raw seat id for positionLabel in that case, and leaves playerName
+  // undefined, same as a response that was never given a name).
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS position_label TEXT`;
+  await db`ALTER TABLE survey_responses ADD COLUMN IF NOT EXISTS player_name TEXT`;
   // When an account last viewed a game's playtest notes (see NotesView) —
   // compared against survey_responses.created_at to decide whether a game
   // has unread feedback. One row per (email, game_id); upserted on every

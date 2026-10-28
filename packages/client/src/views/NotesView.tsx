@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { STANDARD_SURVEY_QUESTIONS, type SurveyResponse } from '@denimcat/shared';
 import { loadSessionToken } from '../state/authToken';
 import { markFeedbackRead } from '../state/feedback';
+import { playerLabel } from '../playerLabel';
 import { SERVER_URL } from '../socket';
 
 const QUESTION_TEXT: Record<string, string> = Object.fromEntries(STANDARD_SURVEY_QUESTIONS.map((q) => [q.id, q.text]));
@@ -87,7 +88,7 @@ export function NotesView({ gameId }: { gameId: string }) {
                   {/* questionId shown alongside the text as a stable reference — question wording can
                       change over time (see StandardSurveyQuestion's doc comment), but an already-submitted
                       answer keeps the id it was recorded under. */}
-                  {r.seat} — {QUESTION_TEXT[r.questionId] ?? r.questionId} ({r.questionId})
+                  {playerLabel(r.playerName, r.positionLabel)} — {QUESTION_TEXT[r.questionId] ?? r.questionId} ({r.questionId})
                 </strong>
                 <br />
                 {r.answer}

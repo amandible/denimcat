@@ -1,8 +1,7 @@
-import { scoreForPrizes, type MintConditionStateView } from '@denimcat/engine-mint-condition';
-import { seatLabel } from '../seats';
+import { scoreForPrizes, type MintConditionStateView, type SeatId } from '@denimcat/engine-mint-condition';
 import { PrizeChip } from './PrizeChip';
 
-export function ScoreBoard({ state }: { state: MintConditionStateView }) {
+export function ScoreBoard({ state, displayLabel }: { state: MintConditionStateView; displayLabel: (seat: SeatId) => string }) {
   const ended = state.phase === 'ended';
 
   return (
@@ -22,7 +21,7 @@ export function ScoreBoard({ state }: { state: MintConditionStateView }) {
                 fontWeight: isWinner ? 'bold' : 500,
               }}
             >
-              {seatLabel(seat)}: {total}{' '}
+              {displayLabel(seat)}: {total}{' '}
               {colorBonus > 0 && (
                 <span style={{ color: 'var(--muted)', fontWeight: 'normal' }}>
                   ({base} + {colorBonus} color bonus)
@@ -42,8 +41,8 @@ export function ScoreBoard({ state }: { state: MintConditionStateView }) {
       {ended && (
         <p style={{ fontWeight: 'bold', fontSize: 24, marginTop: 12 }}>
           {state.winner && state.winner.length > 1
-            ? `Shared win: ${state.winner.map(seatLabel).join(' & ')}!`
-            : `${state.winner ? seatLabel(state.winner[0]) : ''} wins!`}
+            ? `Shared win: ${state.winner.map(displayLabel).join(' & ')}!`
+            : `${state.winner ? displayLabel(state.winner[0]) : ''} wins!`}
         </p>
       )}
 
