@@ -13,6 +13,7 @@
     "@denimcat/engine-hyperbloom": "*",
     "@denimcat/engine-mint-condition": "*",
     "@denimcat/engine-love-triangles": "*",
+    "@denimcat/engine-detour": "*",
     "@denimcat/engine-tashkalar": "*",
     "@denimcat/engine-kingsgate": "*",
     "react": "^18.3.1",
