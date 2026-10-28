@@ -276,6 +276,19 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     if (seat) {
       return { ok: false, error: { code: 'SEAT_TAKEN', message: `${role} is already taken.` } };
     }
+    // The live record can be gone (expired after the ordinary reconnect
+    // grace) while the seat is still genuinely owned — knownAccounts is the
+    // durable record of who actually claimed it, and that claim survives a
+    // lapsed connection. Without this check, a brand-new visitor's plain
+    // join_room would indistinguishably look like the seat was never
+    // joined, silently taking over the real owner's identity (and whatever
+    // moves they'd already made) the moment their tab happened to be
+    // closed for a couple of minutes. The real owner isn't locked out by
+    // this — accountEmail matching knownAccounts[role] still passes through.
+    const existingOwner = room.knownAccounts[role];
+    if (existingOwner && existingOwner !== accountEmail) {
+      return { ok: false, error: { code: 'SEAT_TAKEN', message: `${role} is already taken.` } };
+    }
 
     const seatToken = nanoid(21);
     room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name };
@@ -830,11 +843,46 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
    * an email even once they do), but the room still shouldn't expire
    * before they get around to it. A hotseat room never collects an email
    * for any seat at all, so this still correctly excludes every one of
-   * those — see IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS.
+   * those — see IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS. In practice this tier now
+   * only ever applies to a room `hasEverBeenClaimed` already found
+   * permanently sweep-exempt (any known email implies a known account too,
+   * now that every join is account-authenticated — see that method's doc
+   * comment), but it's kept rather than removed: a room predating accounts
+   * could in principle still have a known email with no backfilled account.
    */
   private idleTimeoutFor(room: LiveRoom<TState, TSeat>): number {
     const anySeatHasEmail = Object.keys(room.knownEmails).length > 0;
     return anySeatHasEmail ? this.idleTimeoutWithEmailsMs : this.idleTimeoutMs;
+  }
+
+  /**
+   * True once ANY seat has ever been claimed by a known account or email —
+   * the durable record (PersistedRoom.knownAccounts/knownEmails), not the
+   * live `seats` map, which only reflects who's *currently* connected and
+   * is deliberately short-lived (see expireSeat's 2-minute reconnect
+   * grace).
+   */
+  private hasEverBeenClaimed(room: LiveRoom<TState, TSeat>): boolean {
+    return Object.keys(room.knownAccounts).length > 0 || Object.keys(room.knownEmails).length > 0;
+  }
+
+  /**
+   * Guards sweepIdleRooms: a claimed-but-unfinished room must never be
+   * auto-deleted just because its last connected player's live record
+   * lapsed — only explicit abandonment should remove it (see
+   * abandonRoom/isAbandonable, which already reads knownAccounts, not
+   * `seats`, for the identical reason). Confirmed with the designer after
+   * a real-world bug report: rooms were disappearing mid-invite because
+   * the creator's own seat record lapsed before anyone else joined.
+   * Deliberately NOT permanent once the game has actually finished,
+   * though — recapFullyViewed already keeps a finished-but-unviewed room
+   * alive, and once every claimant has seen the result there's no reason
+   * left to hold onto it forever; ordinary idle cleanup should still
+   * eventually reclaim it, the same as any other finished game.
+   */
+  private isPermanentlyExemptFromSweep(room: LiveRoom<TState, TSeat>): boolean {
+    const isFinished = this.module.isRoomFinished?.(room.gameState) ?? false;
+    return !isFinished && this.hasEverBeenClaimed(room);
   }
 
   /**
@@ -858,8 +906,18 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   private async sweepIdleRooms(): Promise<void> {
     const now = Date.now();
     for (const [code, room] of this.cache) {
-      const hasOccupant = Object.keys(room.seats).length > 0 || room.spectatorSocketIds.size > 0;
-      if (!hasOccupant && now - room.lastActivityAt > this.idleTimeoutFor(room) && this.recapFullyViewed(room)) {
+      // A live, currently-connected seat always implies knownAccounts is
+      // already set for it (every join is account-authenticated — see
+      // hasEverBeenClaimed), so checking seats here too would be redundant;
+      // an active spectator has no durable claim at all, so it still needs
+      // its own check.
+      const hasActiveSpectator = room.spectatorSocketIds.size > 0;
+      if (
+        !hasActiveSpectator &&
+        !this.isPermanentlyExemptFromSweep(room) &&
+        now - room.lastActivityAt > this.idleTimeoutFor(room) &&
+        this.recapFullyViewed(room)
+      ) {
         this.cache.delete(code);
         await this.repository.delete(code);
       }

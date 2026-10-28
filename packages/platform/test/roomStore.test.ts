@@ -223,6 +223,38 @@ describe('RoomStore — reconnecting by account identity', () => {
     if (aliceStillOwns.ok) expect(aliceStillOwns.you).toEqual({ role: 'p1' });
     store.stop();
   });
+
+  it(
+    "joinRoom refuses a different account's attempt to claim a seat already owned by someone " +
+      "else, even once that seat's own live record has fully expired — e.g. alice creates a " +
+      'room and joins p1, then closes the tab before anyone else joins; p1\'s live seat record ' +
+      "lapses after the ordinary reconnect grace, but a brand-new visitor must not be able to " +
+      "pick p1 as if it were never joined — that would silently take over alice's identity in " +
+      'the game, including whatever moves she already made',
+    async () => {
+      const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+      const store = new RoomStore(makeModule(), repo, fakeNamespace(), { graceMs: 1 });
+      const created = await store.createRoom(undefined);
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, undefined, 'alice@example.com');
+      await store.handleDisconnect('socket-1');
+      await new Promise((resolve) => setTimeout(resolve, 20)); // let the 1ms grace timer fire and free the live seat record
+
+      const room = await store.getRoom(created.roomCode);
+      expect(room?.seats.p1).toBeUndefined(); // the live record really is gone, same as a never-joined seat would look
+
+      const stolen = await store.joinRoom(created.roomCode, 'p1', 'socket-2', undefined, undefined, 'mallory@example.com');
+      expect(stolen).toEqual({ ok: false, error: { code: 'SEAT_TAKEN', message: expect.any(String) } });
+
+      // The original owner can still freshly join her own seat, though —
+      // this isn't a lockout, just protection against anyone else.
+      const aliceAgain = await store.joinRoom(created.roomCode, 'p1', 'socket-3', undefined, undefined, 'alice@example.com');
+      expect(aliceAgain.ok).toBe(true);
+      store.stop();
+    },
+  );
 });
 
 type TurnSeat = 'p1' | 'p2';
@@ -611,6 +643,42 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
     expect(await repo.get('EMPT')).toBeNull();
     store.stop();
   });
+
+  it(
+    'never sweeps a room where a seat has ever been claimed by a known account, no matter how ' +
+      'long ago its live connection expired or how far past even the LONG timeout — e.g. creating ' +
+      "a room, joining as p1 with no email on file, then closing the tab while waiting for a " +
+      "friend to accept an invite days later: p1's live seat record lapses after the ordinary " +
+      "2-minute reconnect grace, but the room itself must never be auto-deleted just because " +
+      'nobody is currently connected to it',
+    async () => {
+      const past = Date.now() - 1000;
+      const repo = new InMemoryRoomRepository<TurnState, TurnSeat>();
+      await repo.save({
+        code: 'CLMD',
+        gameId: 'turn-game',
+        gameState: { turn: 'p1' },
+        seatOrder: ['p1', 'p2'],
+        seats: {}, // live record already expired — nobody currently connected
+        knownAccounts: { p1: 'alice@example.com' }, // but p1 was genuinely claimed
+        // no knownEmails at all — this is specifically the no-email case, which
+        // would have gotten only the SHORT timeout under the old tiered logic
+        createdAt: past,
+        lastActivityAt: past,
+      });
+      const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), {
+        idleSweepMs: 15,
+        idleTimeoutMs: 20,
+        idleTimeoutWithEmailsMs: 25, // even the "long" tier is far exceeded below
+      });
+
+      await store.getRoom('CLMD');
+      await new Promise((resolve) => setTimeout(resolve, 80)); // past both timeouts, many sweep cycles
+
+      expect(await repo.get('CLMD')).not.toBeNull();
+      store.stop();
+    },
+  );
 
   it(
     'never sweeps a finished room while an account that held a seat still has not viewed its recap — ' +
