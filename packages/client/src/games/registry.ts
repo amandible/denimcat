@@ -25,6 +25,12 @@ export const GAMES: GameDescriptor[] = [
     tagline: 'Claim lines to form loops - by a_mandible (testing).',
   },
   {
+    slug: 'detour',
+    displayName: 'Detour',
+    namespace: '/detour',
+    tagline: 'TODO: Detour description',
+  },
+  {
     slug: 'tashkalar',
     displayName: 'Tash-Kalar',
     namespace: '/tashkalar',

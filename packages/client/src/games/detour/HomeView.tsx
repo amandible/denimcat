@@ -1,0 +1,96 @@
+import { useState, type FormEvent } from 'react';
+import type { PlayerCount } from '@denimcat/engine-detour';
+import { createSocket } from '../../socket';
+import { loadIsOwner, loadSessionToken } from '../../state/authToken';
+
+function goToRoom(code: string, hotseat?: boolean, playerCount?: PlayerCount) {
+  // playerCount is only needed for hotseat — it tells DetourRoom how
+  // many seats to auto-join, since a hotseat room otherwise has no way to
+  // know its own seat count before the first join attempt (which would
+  // otherwise try to join every possible seat, failing hard on any that
+  // don't exist for this room's actual player count).
+  const params = hotseat ? `?hotseat=1&players=${playerCount ?? 2}` : '';
+  window.location.href = `/detour/room/${code.toUpperCase()}${params}`;
+}
+
+export function DetourHomeView() {
+  const [codeInput, setCodeInput] = useState('');
+  const [playerCount, setPlayerCount] = useState<PlayerCount>(2);
+  const [busy, setBusy] = useState(false);
+
+  function handleCreate(hotseat?: boolean) {
+    setBusy(true);
+    const socket = createSocket('/detour', loadSessionToken() ?? '');
+    socket.on('connect', () => {
+      socket.emit(
+        'create_room',
+        { playerCount },
+        (result: { ok: true; roomCode: string } | { ok: false; error: unknown }) => {
+          socket.close();
+          if (result.ok) goToRoom(result.roomCode, hotseat, playerCount);
+        },
+      );
+    });
+  }
+
+  function handleJoin(e: FormEvent) {
+    e.preventDefault();
+    if (codeInput.trim()) goToRoom(codeInput.trim());
+  }
+
+  return (
+    <main style={{ maxWidth: 420, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
+      <div className="panel" style={{ width: '100%' }}>
+        <h1 style={{ fontSize: 28 }}>Detour</h1>
+        <p style={{ color: 'var(--muted)', marginTop: 0 }}>TODO: Detour description</p>
+        {loadIsOwner() && (
+          <p style={{ fontSize: 13, marginTop: -8 }}>
+            <a href="/detour/notes">Playtest notes</a>
+          </p>
+        )}
+
+        <p style={{ fontSize: 14, marginBottom: 6 }}>Players</p>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {([2, 3, 4] as PlayerCount[]).map((count) => (
+            <button
+              key={count}
+              className="btn"
+              onClick={() => setPlayerCount(count)}
+              style={count === playerCount ? { borderColor: 'var(--accent)', boxShadow: '0 0 0 2px rgba(43,138,62,0.2)' } : undefined}
+            >
+              {count}
+            </button>
+          ))}
+        </div>
+
+        <button className="btn btn-primary" onClick={() => handleCreate()} disabled={busy} style={{ width: '100%', padding: 12, fontSize: 16 }}>
+          Create a room
+        </button>
+        <button className="btn" onClick={() => handleCreate(true)} disabled={busy} style={{ width: '100%', padding: 12, fontSize: 16, marginTop: 8 }}>
+          Play solo (hotseat)
+        </button>
+        <div style={{ margin: '20px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>or</div>
+        <form onSubmit={handleJoin} style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value)}
+            placeholder="Room code"
+            maxLength={4}
+            style={{
+              flex: 1,
+              padding: 12,
+              fontSize: 16,
+              textTransform: 'uppercase',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+            }}
+          />
+          <button className="btn" type="submit" style={{ padding: '12px 16px', fontSize: 16 }}>
+            Join
+          </button>
+        </form>
+      </div>
+    </main>
+  );
+}

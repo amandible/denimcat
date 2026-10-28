@@ -7,18 +7,20 @@ import { NotesView } from './views/NotesView';
 import { HyperBloomHomeView } from '../../../private-games/other-games/client-hyperbloom/HomeView';
 import { MintConditionHomeView } from './games/mint-condition/HomeView';
 import { LoveTrianglesHomeView } from './games/love-triangles/HomeView';
+import { DetourHomeView } from './games/detour/HomeView';
 import { TashKalarHomeView } from '../../../private-games/other-games/client-tashkalar/HomeView';
 import { KingsGateHomeView } from '../../../private-games/other-games/client-kingsgate/HomeView';
 import { HyperBloomRoom } from '../../../private-games/other-games/client-hyperbloom/HyperBloomRoom';
 import { MintConditionRoom } from './games/mint-condition/MintConditionRoom';
 import { LoveTrianglesRoom } from './games/love-triangles/LoveTrianglesRoom';
+import { DetourRoom } from './games/detour/DetourRoom';
 import { TashKalarRoom } from '../../../private-games/other-games/client-tashkalar/TashKalarRoom';
 import { KingsGateRoom } from '../../../private-games/other-games/client-kingsgate/KingsGateRoom';
 import { loadSessionToken, onSessionInvalidated, saveIdentity } from './state/authToken';
 import { SERVER_URL } from './socket';
 import { Footer } from './components/Footer';
 
-type Slug = 'hyperbloom' | 'mint-condition' | 'love-triangles' | 'tashkalar' | 'kingsgate';
+type Slug = 'hyperbloom' | 'mint-condition' | 'love-triangles' | 'detour' | 'tashkalar' | 'kingsgate';
 
 type Route =
   | { kind: 'home' }
@@ -30,15 +32,15 @@ type Route =
 
 function parseRoute(): Route {
   const path = window.location.pathname;
-  const roomMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/room\/([A-Za-z0-9]{4})$/);
+  const roomMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|detour|tashkalar|kingsgate)\/room\/([A-Za-z0-9]{4})$/);
   if (roomMatch) {
     return { kind: 'room', slug: roomMatch[1] as Slug, roomCode: roomMatch[2].toUpperCase() };
   }
-  const notesMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/notes$/);
+  const notesMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|detour|tashkalar|kingsgate)\/notes$/);
   if (notesMatch) {
     return { kind: 'game-notes', slug: notesMatch[1] as Slug };
   }
-  const gameMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|tashkalar|kingsgate)\/?$/);
+  const gameMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|detour|tashkalar|kingsgate)\/?$/);
   if (gameMatch) {
     return { kind: 'game-home', slug: gameMatch[1] as Slug };
   }
@@ -54,6 +56,7 @@ const HOME_VIEWS: Record<Slug, () => JSX.Element> = {
   hyperbloom: HyperBloomHomeView,
   'mint-condition': MintConditionHomeView,
   'love-triangles': LoveTrianglesHomeView,
+  detour: DetourHomeView,
   tashkalar: TashKalarHomeView,
   kingsgate: KingsGateHomeView,
 };
@@ -62,6 +65,7 @@ const ROOM_VIEWS: Record<Slug, (props: { roomCode: string }) => JSX.Element> = {
   hyperbloom: HyperBloomRoom,
   'mint-condition': MintConditionRoom,
   'love-triangles': LoveTrianglesRoom,
+  detour: DetourRoom,
   tashkalar: TashKalarRoom,
   kingsgate: KingsGateRoom,
 };
