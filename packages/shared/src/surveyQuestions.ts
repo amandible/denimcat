@@ -1,8 +1,6 @@
 /**
- * TODO: designer to write the actual question text (see this project's own
- * standing instruction against inventing this kind of copy). Ids are
- * stable so a future wording tweak never orphans an already-submitted
- * answer — see SurveyResponse.questionId below.
+ * Ids are stable so a future wording tweak never orphans an
+ * already-submitted answer — see SurveyResponse.questionId below.
  */
 export interface StandardSurveyQuestion {
   id: string;
@@ -10,9 +8,10 @@ export interface StandardSurveyQuestion {
 }
 
 export const STANDARD_SURVEY_QUESTIONS: StandardSurveyQuestion[] = [
-  { id: 'fun', text: 'TODO: question text' },
-  { id: 'not-fun', text: 'TODO: question text' },
-  { id: 'memorable', text: 'TODO: question text' },
+  { id: 'bugs', text: 'Any bugs or other problems to share?' },
+  { id: 'fun', text: "What was fun? What's working well?" },
+  { id: 'not-fun', text: 'What was not fun? Where did the game slow down or get harder to pay attention to?' },
+  { id: 'memorable', text: 'What was memorable? What stood out during this play?' },
 ];
 
 /**
