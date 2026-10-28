@@ -9,17 +9,20 @@ import type { PersistedRoom, RoomRepository } from './roomRepository';
 const RECONNECT_GRACE_MS = 2 * 60 * 1000;
 const IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
 /**
- * Only ever applies to a room isPermanentlyExemptFromSweep doesn't already
- * cover — a never-claimed room (nobody, not even the creator, ever
- * actually joined a seat), or a finished-and-fully-viewed one with nothing
- * left for anyone to come back for. A room genuinely still in progress or
- * awaiting a slow-to-join invite is exempt outright, regardless of this
- * timeout — see isPermanentlyExemptFromSweep's doc comment, which is what
- * replaced this timeout's own former long/short tiering keyed on known
- * emails (removed once every real join became account-authenticated,
- * making that distinction redundant with the stronger exemption check).
+ * Applies only to a never-claimed room (nobody, not even the creator, ever
+ * actually joined a seat) — a claimed-but-unfinished room is permanently
+ * exempt from the sweep regardless of any timeout (see
+ * isPermanentlyExemptFromSweep), and a finished-and-fully-viewed room uses
+ * IDLE_ROOM_TIMEOUT_AFTER_RECAP_MS instead — see idleTimeoutFor.
  */
 const IDLE_ROOM_TIMEOUT_MS = 30 * 60 * 1000;
+/**
+ * Gives a finished, fully-recap-viewed room a week before it's swept, so
+ * someone can still come back and look at how a game wrapped up a few days
+ * later. Longer than IDLE_ROOM_TIMEOUT_MS deliberately — there's no urgency
+ * to reclaim a finished room the way there is for one nobody ever claimed.
+ */
+const IDLE_ROOM_TIMEOUT_AFTER_RECAP_MS = 7 * 24 * 60 * 60 * 1000;
 /** Oldest messages drop once a room's chat exceeds this, bounding the per-room JSONB blob for long-running async games. */
 const MAX_CHAT_HISTORY = 200;
 
@@ -61,6 +64,8 @@ export interface RoomStoreOptions {
   graceMs?: number;
   idleSweepMs?: number;
   idleTimeoutMs?: number;
+  /** Applied instead of `idleTimeoutMs` for a finished room once every account that held a seat has viewed its recap — see IDLE_ROOM_TIMEOUT_AFTER_RECAP_MS. */
+  idleTimeoutAfterRecapMs?: number;
   /**
    * Async play: sends a "it's your turn" email when GameModule.getActiveSeat
    * hands the turn to a seat that has no live socket connected right now
@@ -122,6 +127,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   private sweepTimer: NodeJS.Timeout;
   private graceMs: number;
   private idleTimeoutMs: number;
+  private idleTimeoutAfterRecapMs: number;
   private emailSender: EmailSender;
   private appBaseUrl?: string;
 
@@ -133,6 +139,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   ) {
     this.graceMs = options.graceMs ?? RECONNECT_GRACE_MS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_ROOM_TIMEOUT_MS;
+    this.idleTimeoutAfterRecapMs = options.idleTimeoutAfterRecapMs ?? IDLE_ROOM_TIMEOUT_AFTER_RECAP_MS;
     this.emailSender = options.emailSender ?? createNoopEmailSender();
     this.appBaseUrl = options.appBaseUrl;
     this.sweepTimer = setInterval(
@@ -894,6 +901,21 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return true;
   }
 
+  /**
+   * A finished room gets the LONGER post-recap grace (days, not minutes) —
+   * by the time it's reachable here at all, isPermanentlyExemptFromSweep
+   * has already ruled out every unfinished room, so `isFinished` true means
+   * this is specifically a finished-and-fully-viewed room (recapFullyViewed
+   * already guards the finished-but-unviewed case in sweepIdleRooms), the
+   * exact case IDLE_ROOM_TIMEOUT_AFTER_RECAP_MS exists for. Everything else
+   * reaching this point is a room nobody ever claimed at all, which keeps
+   * the ordinary short timeout — there's nothing to come back and look at.
+   */
+  private idleTimeoutFor(room: LiveRoom<TState, TSeat>): number {
+    const isFinished = this.module.isRoomFinished?.(room.gameState) ?? false;
+    return isFinished ? this.idleTimeoutAfterRecapMs : this.idleTimeoutMs;
+  }
+
   private async sweepIdleRooms(): Promise<void> {
     const now = Date.now();
     for (const [code, room] of this.cache) {
@@ -906,7 +928,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       if (
         !hasActiveSpectator &&
         !this.isPermanentlyExemptFromSweep(room) &&
-        now - room.lastActivityAt > this.idleTimeoutMs &&
+        now - room.lastActivityAt > this.idleTimeoutFor(room) &&
         this.recapFullyViewed(room)
       ) {
         this.cache.delete(code);

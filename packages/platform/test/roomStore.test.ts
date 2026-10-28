@@ -714,7 +714,7 @@ describe('RoomStore idle-room sweep', () => {
     },
   );
 
-  it('sweeps a finished room normally once every account that held a seat has viewed its recap', async () => {
+  it('sweeps a finished room once every account that held a seat has viewed its recap and the LONGER post-recap grace has passed', async () => {
     const past = Date.now() - 1000;
     const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
     await repo.save({
@@ -731,6 +731,7 @@ describe('RoomStore idle-room sweep', () => {
     const store = new RoomStore(makeListModule(), repo, fakeNamespace(), {
       idleSweepMs: 15,
       idleTimeoutMs: 20,
+      idleTimeoutAfterRecapMs: 20,
     });
 
     await store.getRoom('SEEN');
@@ -739,6 +740,38 @@ describe('RoomStore idle-room sweep', () => {
     expect(await repo.get('SEEN')).toBeNull();
     store.stop();
   });
+
+  it(
+    'keeps a finished, fully-viewed room around under the LONGER post-recap grace period even ' +
+      "once it's well past the ordinary short idle timeout — e.g. someone wants to come back and " +
+      'look at a game that wrapped up a few days ago',
+    async () => {
+      const past = Date.now() - 1000;
+      const repo = new InMemoryRoomRepository<ListState, TurnSeat>();
+      await repo.save({
+        code: 'RCA2',
+        gameId: 'list-game',
+        gameState: { turn: null, finished: true },
+        seatOrder: ['p1', 'p2'],
+        seats: {},
+        knownAccounts: { p1: 'alice@example.com' },
+        recapViewedBy: { 'alice@example.com': true },
+        createdAt: past,
+        lastActivityAt: past,
+      });
+      const store = new RoomStore(makeListModule(), repo, fakeNamespace(), {
+        idleSweepMs: 15,
+        idleTimeoutMs: 20, // the room is already well past this
+        idleTimeoutAfterRecapMs: 10_000, // but nowhere near this
+      });
+
+      await store.getRoom('RCA2');
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      expect(await repo.get('RCA2')).not.toBeNull();
+      store.stop();
+    },
+  );
 });
 
 describe('RoomStore.listOpenRoomsForAccount', () => {
