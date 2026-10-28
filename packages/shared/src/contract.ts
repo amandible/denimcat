@@ -27,8 +27,15 @@ export interface RoomInfo<TSeat extends string> {
   code: string;
   /** The room's fixed seat list, sized by whatever config it was created with — always present, even for empty seats. */
   seatOrder: TSeat[];
-  /** `name` is whatever the occupying player optionally supplied at join time — absent if they left it blank. */
-  seats: Partial<Record<TSeat, { connected: boolean; name?: string }>>;
+  /**
+   * No entry at all means genuinely open — nobody has ever claimed it.
+   * `claimed` is the durable fact (survives a lapsed connection — see
+   * RoomStore.buildRoomInfo); `connected` is the separate, ordinary
+   * live/away signal. `name` is whatever the occupying player optionally
+   * supplied — absent if nobody ever gave one — and keeps showing even
+   * while `connected` is false.
+   */
+  seats: Partial<Record<TSeat, { claimed: boolean; connected: boolean; name?: string }>>;
   spectatorCount: number;
   chatMessages: ChatMessage[];
 }

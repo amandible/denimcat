@@ -8,18 +8,20 @@ import type { PersistedRoom, RoomRepository } from './roomRepository';
 
 const RECONNECT_GRACE_MS = 2 * 60 * 1000;
 const IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
+/**
+ * Only ever applies to a room isPermanentlyExemptFromSweep doesn't already
+ * cover — a never-claimed room (nobody, not even the creator, ever
+ * actually joined a seat), or a finished-and-fully-viewed one with nothing
+ * left for anyone to come back for. A room genuinely still in progress or
+ * awaiting a slow-to-join invite is exempt outright, regardless of this
+ * timeout — see isPermanentlyExemptFromSweep's doc comment, which is what
+ * replaced this timeout's own former long/short tiering keyed on known
+ * emails (removed once every real join became account-authenticated,
+ * making that distinction redundant with the stronger exemption check).
+ */
 const IDLE_ROOM_TIMEOUT_MS = 30 * 60 * 1000;
 /** Oldest messages drop once a room's chat exceeds this, bounding the per-room JSONB blob for long-running async games. */
 const MAX_CHAT_HISTORY = 200;
-/**
- * A room where ANY seat has ever supplied an email (see LiveRoom.knownEmails
- * and idleTimeoutFor's own doc comment for why "any" rather than "every")
- * reads as a real async game rather than an abandoned/hotseat-testing one —
- * give it weeks, not minutes, so two players genuinely trading moves days
- * apart can never lose to this sweep. There's no real cost to a dormant
- * room sitting in Postgres this long (one JSONB row).
- */
-const IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS = 14 * 24 * 60 * 60 * 1000;
 
 interface LiveSeat {
   seatToken: string;
@@ -59,8 +61,6 @@ export interface RoomStoreOptions {
   graceMs?: number;
   idleSweepMs?: number;
   idleTimeoutMs?: number;
-  /** Applied instead of `idleTimeoutMs` for a room where any seat has ever supplied an email — see IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS. */
-  idleTimeoutWithEmailsMs?: number;
   /**
    * Async play: sends a "it's your turn" email when GameModule.getActiveSeat
    * hands the turn to a seat that has no live socket connected right now
@@ -122,7 +122,6 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   private sweepTimer: NodeJS.Timeout;
   private graceMs: number;
   private idleTimeoutMs: number;
-  private idleTimeoutWithEmailsMs: number;
   private emailSender: EmailSender;
   private appBaseUrl?: string;
 
@@ -134,7 +133,6 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   ) {
     this.graceMs = options.graceMs ?? RECONNECT_GRACE_MS;
     this.idleTimeoutMs = options.idleTimeoutMs ?? IDLE_ROOM_TIMEOUT_MS;
-    this.idleTimeoutWithEmailsMs = options.idleTimeoutWithEmailsMs ?? IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS;
     this.emailSender = options.emailSender ?? createNoopEmailSender();
     this.appBaseUrl = options.appBaseUrl;
     this.sweepTimer = setInterval(
@@ -636,11 +634,24 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     });
   }
 
+  /**
+   * A seat belongs in here once it's EVER been claimed (knownAccounts), not
+   * just while its live connection record exists — otherwise a seat whose
+   * owner stepped away for a couple of minutes looks, to the lobby and to
+   * every other viewer, exactly like one nobody has ever joined. `claimed`
+   * carries that durable fact; `connected` is still the separate, ordinary
+   * live/away signal. `name` prefers the live record (freshest) but falls
+   * back to knownNames so it doesn't blink out the moment someone
+   * disconnects. A seat with neither a live record nor a known account is
+   * genuinely open — no entry at all, same as before.
+   */
   private buildRoomInfo(room: LiveRoom<TState, TSeat>): RoomInfo<TSeat> {
-    const seats: Partial<Record<TSeat, { connected: boolean; name?: string }>> = {};
+    const seats: Partial<Record<TSeat, { claimed: boolean; connected: boolean; name?: string }>> = {};
     for (const seat of room.seatOrder) {
-      const s = room.seats[seat];
-      if (s) seats[seat] = { connected: s.socketId !== null, name: s.name };
+      const live = room.seats[seat];
+      const claimed = !!room.knownAccounts[seat];
+      if (!live && !claimed) continue;
+      seats[seat] = { claimed, connected: live?.socketId != null, name: live?.name ?? room.knownNames[seat] };
     }
     return {
       code: room.code,
@@ -836,26 +847,6 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
   }
 
   /**
-   * ANY seat (not necessarily every seat) ever supplying an email is enough
-   * to read a room as a real async game rather than a hotseat test — e.g.
-   * creating a room, supplying your own email, and messaging a friend to
-   * join later: the friend hasn't joined yet (or might never bother typing
-   * an email even once they do), but the room still shouldn't expire
-   * before they get around to it. A hotseat room never collects an email
-   * for any seat at all, so this still correctly excludes every one of
-   * those — see IDLE_ROOM_TIMEOUT_WITH_EMAILS_MS. In practice this tier now
-   * only ever applies to a room `hasEverBeenClaimed` already found
-   * permanently sweep-exempt (any known email implies a known account too,
-   * now that every join is account-authenticated — see that method's doc
-   * comment), but it's kept rather than removed: a room predating accounts
-   * could in principle still have a known email with no backfilled account.
-   */
-  private idleTimeoutFor(room: LiveRoom<TState, TSeat>): number {
-    const anySeatHasEmail = Object.keys(room.knownEmails).length > 0;
-    return anySeatHasEmail ? this.idleTimeoutWithEmailsMs : this.idleTimeoutMs;
-  }
-
-  /**
    * True once ANY seat has ever been claimed by a known account or email —
    * the durable record (PersistedRoom.knownAccounts/knownEmails), not the
    * live `seats` map, which only reflects who's *currently* connected and
@@ -915,7 +906,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       if (
         !hasActiveSpectator &&
         !this.isPermanentlyExemptFromSweep(room) &&
-        now - room.lastActivityAt > this.idleTimeoutFor(room) &&
+        now - room.lastActivityAt > this.idleTimeoutMs &&
         this.recapFullyViewed(room)
       ) {
         this.cache.delete(code);

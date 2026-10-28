@@ -85,16 +85,16 @@ describe('RoomStore — optional display name at join time', () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
 
-    const joined = await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Alex');
+    const joined = await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Alex', 'alice@example.com');
     expect(joined.ok).toBe(true);
 
     const info = await store.getRoomInfo(created.roomCode);
-    expect(info?.seats.p1).toEqual({ connected: true, name: 'Alex' });
+    expect(info?.seats.p1).toEqual({ claimed: true, connected: true, name: 'Alex' });
     expect(info?.seats.p2).toBeUndefined(); // still open — no entry at all
 
-    await store.joinRoom(created.roomCode, 'p2', 'socket-2'); // no name supplied
+    await store.joinRoom(created.roomCode, 'p2', 'socket-2', undefined, undefined, 'bob@example.com'); // no name supplied
     const infoAfter = await store.getRoomInfo(created.roomCode);
-    expect(infoAfter?.seats.p2).toEqual({ connected: true, name: undefined });
+    expect(infoAfter?.seats.p2).toEqual({ claimed: true, connected: true, name: undefined });
 
     store.stop();
   });
@@ -105,7 +105,7 @@ describe('RoomStore — optional display name at join time', () => {
     const created = await store1.createRoom(undefined);
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    await store1.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Alex');
+    await store1.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Alex', 'alice@example.com');
     store1.stop();
 
     // A fresh RoomStore simulates a server restart — nothing cached, must
@@ -114,6 +114,45 @@ describe('RoomStore — optional display name at join time', () => {
     const info = await store2.getRoomInfo(created.roomCode);
     expect(info?.seats.p1?.name).toBe('Alex');
     store2.stop();
+  });
+});
+
+describe('RoomStore.buildRoomInfo — a claimed seat stays visible once disconnected', () => {
+  it(
+    "a claimed seat whose live record has fully expired still appears in room info as claimed " +
+      "but not connected, with its name carried forward from knownNames — otherwise it's " +
+      'indistinguishable from an open seat to anyone looking at the room (the lobby included)',
+    async () => {
+      const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+      const store = new RoomStore(makeModule(), repo, fakeNamespace(), { graceMs: 1 });
+      const created = await store.createRoom(undefined);
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await store.joinRoom(created.roomCode, 'p1', 'socket-1', undefined, 'Alex', 'alice@example.com');
+      await store.handleDisconnect('socket-1');
+      await new Promise((resolve) => setTimeout(resolve, 20)); // let the 1ms grace timer fire
+
+      const room = await store.getRoom(created.roomCode);
+      expect(room?.seats.p1).toBeUndefined(); // the live record really is gone
+
+      const info = await store.getRoomInfo(created.roomCode);
+      expect(info?.seats.p1).toEqual({ claimed: true, connected: false, name: 'Alex' });
+      store.stop();
+    },
+  );
+
+  it('a seat nobody has ever joined still has no entry at all — correctly indistinguishable from "open"', async () => {
+    const repo = new InMemoryRoomRepository<TestState, TestSeat>();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const info = await store.getRoomInfo(created.roomCode);
+    expect(info?.seats.p1).toBeUndefined();
+    expect(info?.seats.p2).toBeUndefined();
+    store.stop();
   });
 });
 
@@ -575,7 +614,7 @@ describe('RoomStore.notifyGameEnd', () => {
   });
 });
 
-describe('RoomStore idle-room sweep — tiered timeout based on known emails', () => {
+describe('RoomStore idle-room sweep', () => {
   async function seedEmptyRoom(
     code: string,
     knownEmails: Partial<Record<TurnSeat, string>>,
@@ -595,46 +634,12 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
     return repo;
   }
 
-  it(
-    'keeps a room using the long timeout even when only ONE of its two seats has a known ' +
-      "email — e.g. creating a room, supplying your own email, and messaging a friend to join " +
-      "later; the friend hasn't joined yet (or might never type an email even once they do), " +
-      'but the room must not expire before they get around to it',
-    async () => {
-      const past = Date.now() - 1000; // already well past a short timeout, nowhere near a long one
-      const repo = new InMemoryRoomRepository<TurnState, TurnSeat>();
-      await repo.save({
-        code: 'ONEE',
-        gameId: 'turn-game',
-        gameState: { turn: 'p1' },
-        seatOrder: ['p1', 'p2'],
-        seats: {},
-        knownEmails: { p1: 'p1@example.com' }, // p2 has no email on file at all — never joined, or joined without one
-        createdAt: past,
-        lastActivityAt: past,
-      });
-
-      const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), {
-        idleSweepMs: 15,
-        idleTimeoutMs: 20,
-        idleTimeoutWithEmailsMs: 10_000,
-      });
-
-      await store.getRoom('ONEE');
-      await new Promise((resolve) => setTimeout(resolve, 80));
-
-      expect(await repo.get('ONEE')).not.toBeNull();
-      store.stop();
-    },
-  );
-
-  it('a room no one has ever joined (no known emails at all) uses the short timeout, not the long one', async () => {
+  it('a room no one has ever joined (no known accounts or emails at all) sweeps on the ordinary idle timeout', async () => {
     const past = Date.now() - 1000;
     const repo = await seedEmptyRoom('EMPT', {}, past);
     const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), {
       idleSweepMs: 15,
       idleTimeoutMs: 20,
-      idleTimeoutWithEmailsMs: 10_000,
     });
 
     await store.getRoom('EMPT');
@@ -669,11 +674,10 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
       const store = new RoomStore(makeTurnModule(), repo, fakeNamespace(), {
         idleSweepMs: 15,
         idleTimeoutMs: 20,
-        idleTimeoutWithEmailsMs: 25, // even the "long" tier is far exceeded below
       });
 
       await store.getRoom('CLMD');
-      await new Promise((resolve) => setTimeout(resolve, 80)); // past both timeouts, many sweep cycles
+      await new Promise((resolve) => setTimeout(resolve, 80)); // well past the idle timeout, many sweep cycles
 
       expect(await repo.get('CLMD')).not.toBeNull();
       store.stop();
@@ -700,7 +704,6 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
       const store = new RoomStore(makeListModule(), repo, fakeNamespace(), {
         idleSweepMs: 15,
         idleTimeoutMs: 20,
-        idleTimeoutWithEmailsMs: 10_000,
       });
 
       await store.getRoom('RCAP');
@@ -728,7 +731,6 @@ describe('RoomStore idle-room sweep — tiered timeout based on known emails', (
     const store = new RoomStore(makeListModule(), repo, fakeNamespace(), {
       idleSweepMs: 15,
       idleTimeoutMs: 20,
-      idleTimeoutWithEmailsMs: 10_000,
     });
 
     await store.getRoom('SEEN');

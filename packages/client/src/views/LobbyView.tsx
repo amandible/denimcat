@@ -24,10 +24,14 @@ export function LobbyView({
   const [name, setName] = useState(loadDisplayName() ?? '');
   // A stored seat token for this room went stale (its reconnect grace
   // lapsed since this browser was last here) — unless someone else has
-  // since taken that seat, this player isn't picking a fresh one, they're
+  // since claimed that seat, this player isn't picking a fresh one, they're
   // coming back to their own. See RoomConnection.previousRole's doc comment.
+  // Checked against `claimed`, not mere presence: if this account still
+  // genuinely owned that seat, reconnect_by_account (tried before ever
+  // reaching this screen) would already have reclaimed it — reaching here
+  // with a previousRole whose seat shows claimed means someone ELSE has it.
   const returningSeat =
-    connection.previousRole && !connection.roomInfo?.seats[connection.previousRole] ? connection.previousRole : null;
+    connection.previousRole && !connection.roomInfo?.seats[connection.previousRole]?.claimed ? connection.previousRole : null;
 
   // Offer back whatever name this browser typed in last time it joined that
   // seat, if any — see StoredSeat.name's doc comment. Still freely editable;
@@ -77,7 +81,7 @@ export function LobbyView({
                 style={{ padding: 12, fontSize: 16 }}
               >
                 {occupant
-                  ? `${seatLabel(seat)} — taken${occupant.name ? ` by ${occupant.name}` : ''}`
+                  ? `${seatLabel(seat)} — taken${occupant.name ? ` by ${occupant.name}` : ''}${occupant.claimed && !occupant.connected ? ' (away)' : ''}`
                   : isReturning
                     ? `Continue as ${seatLabel(seat)}`
                     : `Join as ${seatLabel(seat)}`}
