@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { directionFor, type SeatId } from '@denimcat/engine-detour';
+import { BOARD_CELLS, directionFor, isLegalPlacement, type SeatId } from '@denimcat/engine-detour';
 import type { DetourConnection } from './useDetourActions';
-import { Board } from './components/Board';
+import { Board, OWNER_COLORS } from './components/Board';
 import { ScoreBoard } from './components/ScoreBoard';
 import { RulesContent } from './components/RulesContent';
 import { RulesModal } from '../../components/RulesModal';
@@ -30,6 +30,11 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   const displayLog = gameState.log.map((line) => substituteSeatTokens(line, gameState.seats, (seat) => displayLabel(seat as SeatId)));
   const deckIdOf = (seat: SeatId) => gameState.players[seat].deckId;
   const myDeckId = mySeat ? deckIdOf(mySeat) : null;
+  const myColor = mySeat ? OWNER_COLORS[mySeat] : 'var(--border)';
+  const legalCells =
+    isMyTurn && selectedCard !== null
+      ? new Set(BOARD_CELLS.filter((cellId) => isLegalPlacement(gameState, selectedCard, cellId)))
+      : undefined;
 
   function handleCellClick(cellId: string) {
     if (!isMyTurn || selectedCard === null) return;
@@ -52,6 +57,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           deckIdOf={deckIdOf}
           displayLabel={displayLabel}
           canPlay={isMyTurn && selectedCard !== null}
+          legalCells={legalCells}
           onCellClick={handleCellClick}
         />
         {mySeat && gameState.phase === 'playing' && (
@@ -75,6 +81,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
                     flexDirection: 'column',
                     alignItems: 'center',
                     lineHeight: 1.1,
+                    border: `2px solid ${myColor}`,
                     ...(value === selectedCard
                       ? { borderColor: 'var(--accent)', boxShadow: '0 0 0 2px rgba(43,138,62,0.2)' }
                       : undefined),

@@ -23,6 +23,7 @@ export function Board({
   deckIdOf,
   displayLabel,
   canPlay,
+  legalCells,
   onCellClick,
 }: {
   cells: Record<string, CellView>;
@@ -32,6 +33,8 @@ export function Board({
   displayLabel: (seat: SeatId) => string;
   /** Whether a card is currently selected and it's the viewer's turn — gates click handling, not just visuals. */
   canPlay: boolean;
+  /** Cell ids the selected card may legally be played on. Undefined (no card selected) shows no highlighting. */
+  legalCells?: Set<string>;
   onCellClick: (cellId: string) => void;
 }) {
   return (
@@ -51,11 +54,13 @@ export function Board({
           const owned = cell && cell.owner !== 'neutral' ? (cell.owner as SeatId) : null;
           const ownerColor = owned ? OWNER_COLORS[owned] : 'var(--border)';
           const arrow = owned && cell ? ARROW_GLYPHS[directionFor(deckIdOf(owned), cell.value)] : null;
+          const isLegal = !!legalCells?.has(cellId);
+          const clickable = canPlay && (!legalCells || isLegal);
           return (
             <button
               key={cellId}
-              onClick={() => canPlay && onCellClick(cellId)}
-              disabled={!canPlay}
+              onClick={() => clickable && onCellClick(cellId)}
+              disabled={!clickable}
               style={{
                 gridColumn: col + 1,
                 gridRow: row + 1,
@@ -63,12 +68,13 @@ export function Board({
                 height: CELL_SIZE,
                 border: `2px solid ${ownerColor}`,
                 borderRadius: 6,
+                boxShadow: isLegal ? '0 0 0 3px rgba(43,138,62,0.55)' : 'none',
                 background: isPawn ? 'var(--accent)' : 'var(--panel-bg)',
                 color: isPawn ? 'white' : 'var(--text)',
                 fontWeight: 'bold',
                 fontSize: 14,
                 lineHeight: 1.1,
-                cursor: canPlay ? 'pointer' : 'default',
+                cursor: clickable ? 'pointer' : 'default',
                 padding: 0,
                 display: 'flex',
                 flexDirection: 'column',
