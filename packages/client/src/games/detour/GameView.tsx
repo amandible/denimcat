@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SeatId } from '@denimcat/engine-detour';
+import { directionFor, type SeatId } from '@denimcat/engine-detour';
 import type { DetourConnection } from './useDetourActions';
 import { Board } from './components/Board';
 import { ScoreBoard } from './components/ScoreBoard';
@@ -9,6 +9,7 @@ import { ActivityPanel } from '../../components/ActivityPanel';
 import { RecapPanel } from '../../components/RecapPanel';
 import { playerLabel, substituteSeatTokens } from '../../playerLabel';
 import { seatLabel } from './seats';
+import { ARROW_GLYPHS } from './arrows';
 
 export function GameView({ roomCode, connection }: { roomCode: string; connection: DetourConnection }) {
   const { gameState, you } = connection;
@@ -27,6 +28,8 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   // always reading "Player 1".
   const displayLabel = (seat: SeatId): string => playerLabel(connection.roomInfo?.seats[seat]?.name, seatLabel(seat));
   const displayLog = gameState.log.map((line) => substituteSeatTokens(line, gameState.seats, (seat) => displayLabel(seat as SeatId)));
+  const deckIdOf = (seat: SeatId) => gameState.players[seat].deckId;
+  const myDeckId = mySeat ? deckIdOf(mySeat) : null;
 
   function handleCellClick(cellId: string) {
     if (!isMyTurn || selectedCard === null) return;
@@ -46,6 +49,8 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         <Board
           cells={gameState.cells}
           pawnCell={gameState.pawnCell}
+          deckIdOf={deckIdOf}
+          displayLabel={displayLabel}
           canPlay={isMyTurn && selectedCard !== null}
           onCellClick={handleCellClick}
         />
@@ -65,13 +70,18 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
                   className="btn"
                   disabled={!isMyTurn}
                   onClick={() => setSelectedCard(value === selectedCard ? null : value)}
-                  style={
-                    value === selectedCard
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    lineHeight: 1.1,
+                    ...(value === selectedCard
                       ? { borderColor: 'var(--accent)', boxShadow: '0 0 0 2px rgba(43,138,62,0.2)' }
-                      : undefined
-                  }
+                      : undefined),
+                  }}
                 >
-                  {value}
+                  <span>{value}</span>
+                  {myDeckId && <span style={{ fontSize: 12, opacity: 0.8 }}>{ARROW_GLYPHS[directionFor(myDeckId, value)]}</span>}
                 </button>
               ))}
             </div>
@@ -82,6 +92,15 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
       <div className="panel" style={{ flex: '1 1 260px', height: 'fit-content' }}>
         <p style={{ marginTop: 0 }}>
           You are <strong>{you.role === 'spectator' ? 'a spectator' : seatLabel(mySeat as SeatId)}</strong>
+          {myDeckId && (
+            <span style={{ color: 'var(--muted)' }}>
+              {' '}
+              — Deck {myDeckId} (your arrow cycle: {(['up', 'left', 'right', 'down'] as const)
+                .map((_, i) => ARROW_GLYPHS[directionFor(myDeckId, i + 1)])
+                .join(' ')}
+              …)
+            </span>
+          )}
         </p>
 
         <ScoreBoard gameState={gameState} displayLabel={displayLabel} />

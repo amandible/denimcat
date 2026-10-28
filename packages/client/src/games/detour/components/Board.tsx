@@ -1,23 +1,11 @@
-import type { SeatId } from '@denimcat/engine-detour';
+import { BOARD_CELLS, directionFor, type DeckId, type SeatId } from '@denimcat/engine-detour';
+import { ARROW_GLYPHS } from '../arrows';
 
 const CELL_SIZE = 48;
 const CELL_GAP = 4;
 
-/** Same 5-col x 4-row rectangle minus the top-right and bottom-left cells as the engine's board.ts — the server sends only Record<CellId, CellState>, never shape, so this is reconstructed client-side. */
-const BOARD_CELLS: string[] = (() => {
-  const cells: string[] = [];
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 5; col++) {
-      if (row === 0 && col === 4) continue;
-      if (row === 3 && col === 0) continue;
-      cells.push(`${row}-${col}`);
-    }
-  }
-  return cells;
-})();
-
 /** Literal hex, not CSS vars — Detour has no dedicated stylesheet and seats are positions (Player 1-4), not colors, so there's no existing palette to reuse. Matches King's Gate's ScoreBoard.tsx convention for a game in the same situation. */
-const OWNER_COLORS: Record<SeatId, string> = {
+export const OWNER_COLORS: Record<SeatId, string> = {
   p1: '#c62828',
   p2: '#1a237e',
   p3: '#8a6d00',
@@ -32,11 +20,16 @@ interface CellView {
 export function Board({
   cells,
   pawnCell,
+  deckIdOf,
+  displayLabel,
   canPlay,
   onCellClick,
 }: {
   cells: Record<string, CellView>;
   pawnCell: string;
+  /** Resolves an owning seat to its assigned deck, so an owned cell's arrow can be shown — neutral cells have no arrow (see directionFor's doc comment; never called for them). */
+  deckIdOf: (seat: SeatId) => DeckId;
+  displayLabel: (seat: SeatId) => string;
   /** Whether a card is currently selected and it's the viewer's turn — gates click handling, not just visuals. */
   canPlay: boolean;
   onCellClick: (cellId: string) => void;
@@ -55,7 +48,9 @@ export function Board({
           const [row, col] = cellId.split('-').map(Number);
           const cell = cells[cellId];
           const isPawn = cellId === pawnCell;
-          const ownerColor = cell && cell.owner !== 'neutral' ? OWNER_COLORS[cell.owner as SeatId] : 'var(--border)';
+          const owned = cell && cell.owner !== 'neutral' ? (cell.owner as SeatId) : null;
+          const ownerColor = owned ? OWNER_COLORS[owned] : 'var(--border)';
+          const arrow = owned && cell ? ARROW_GLYPHS[directionFor(deckIdOf(owned), cell.value)] : null;
           return (
             <button
               key={cellId}
@@ -71,13 +66,19 @@ export function Board({
                 background: isPawn ? 'var(--accent)' : 'var(--panel-bg)',
                 color: isPawn ? 'white' : 'var(--text)',
                 fontWeight: 'bold',
-                fontSize: 15,
+                fontSize: 14,
+                lineHeight: 1.1,
                 cursor: canPlay ? 'pointer' : 'default',
                 padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
-              title={cell ? `${cell.value}${cell.owner !== 'neutral' ? ` (${cell.owner})` : ''}` : undefined}
+              title={cell ? (owned ? `${cell.value} — ${displayLabel(owned)}` : `${cell.value}`) : undefined}
             >
-              {cell?.value ?? ''}
+              <span>{cell?.value ?? ''}</span>
+              {arrow && <span style={{ fontSize: 12, opacity: 0.8 }}>{arrow}</span>}
             </button>
           );
         })}
