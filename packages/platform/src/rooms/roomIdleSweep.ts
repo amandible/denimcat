@@ -1,7 +1,6 @@
 import type { ActionResult } from '@denimcat/shared';
 import { clearGraceTimer, getRoom } from './roomCore';
-import type { LiveRoom, RoomStoreContext } from './roomStoreContext';
-import type { OpenGameSummary } from './roomStore';
+import type { LiveRoom, OpenGameSummary, RoomStoreContext } from './roomStoreContext';
 
 /**
  * Every one of this game's rooms where `email` holds a seat, EXCEPT a

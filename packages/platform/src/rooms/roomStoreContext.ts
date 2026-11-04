@@ -38,6 +38,30 @@ export interface LiveRoom<TState, TSeat extends string> {
 
 export type SocketBinding<TSeat extends string> = { code: string; role: Role<TSeat> };
 
+/** One open room an account holds a seat in — see RoomStore.listOpenRoomsForAccount. */
+export interface OpenGameSummary<TSeat extends string> {
+  gameId: string;
+  code: string;
+  /** Every seat this account holds — more than one only for a hotseat room, where every seat was joined from the same authenticated browser. */
+  mySeats: TSeat[];
+  /** room.seatOrder.length — lets the caller detect "I hold every seat" (hotseat) without re-deriving it. */
+  seatCount: number;
+  /**
+   * 'your-turn': the game isn't finished and it's one of mySeats' turn.
+   * 'waiting': the game isn't finished and it isn't my turn.
+   * 'recap': the game has finished and I haven't viewed it yet (see
+   * PersistedRoom.recapViewedBy) — once viewed, the room drops off the
+   * list entirely rather than reporting a fourth status.
+   */
+  status: 'your-turn' | 'waiting' | 'recap';
+  lastActivityAt: number;
+  createdAt: number;
+  /** True when no OTHER seat has ever been joined by a different account — see RoomStore.abandonRoom, which re-verifies this itself rather than trusting the caller. False once the game has finished: an ended game isn't "abandoned," it's over. */
+  abandonable: boolean;
+  /** Display names of every OTHER seat that has ever supplied one (knownNames), in seat order — skips seats nobody's joined yet or that joined with no name given. */
+  otherPlayerNames: string[];
+}
+
 /**
  * Every piece of RoomStore's per-instance mutable state and
  * constructor-injected dependencies, as plain data — no function
