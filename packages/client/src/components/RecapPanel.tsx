@@ -1,9 +1,15 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { STANDARD_SURVEY_QUESTIONS } from '@denimcat/shared';
 import { loadSessionToken } from '../state/authToken';
 import { SERVER_URL } from '../socket';
 
-type SubmitState = { kind: 'idle' } | { kind: 'dismissed' } | { kind: 'submitted'; allNew: boolean } | { kind: 'failed' };
+type SubmitState =
+  | { kind: 'checking' }
+  | { kind: 'idle' }
+  | { kind: 'dismissed' }
+  | { kind: 'already-submitted' }
+  | { kind: 'submitted'; allNew: boolean }
+  | { kind: 'failed' };
 
 /**
  * Shown in place of a finished room's normal play UI — the one shared
@@ -48,9 +54,39 @@ export function RecapPanel({
   myPositionLabel?: string;
   resultSummary: ReactNode;
 }) {
-  const [state, setState] = useState<SubmitState>({ kind: 'idle' });
+  const [state, setState] = useState<SubmitState>(mySeat ? { kind: 'checking' } : { kind: 'idle' });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+
+  // Without this, every reload of a finished room's page re-showed the
+  // blank form even after a successful submit — nothing ever checked
+  // whether this seat had already answered. A fresh seat starts in
+  // 'checking' (above) specifically to avoid a flash of the form before
+  // this resolves. Any answer at all (not necessarily every question)
+  // counts as "already submitted" — a player who skipped some questions
+  // doesn't expect to be re-prompted on their next visit.
+  useEffect(() => {
+    if (!mySeat) return;
+    let cancelled = false;
+    const token = loadSessionToken();
+    if (!token) {
+      setState({ kind: 'idle' });
+      return;
+    }
+    fetch(`${SERVER_URL}/survey-responses/${gameId}/${roomCode}/mine`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => res.json())
+      .then((data: { ok: true; answeredQuestionIds: string[] } | { ok: false }) => {
+        if (cancelled) return;
+        setState(data.ok && data.answeredQuestionIds.length > 0 ? { kind: 'already-submitted' } : { kind: 'idle' });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ kind: 'idle' });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, roomCode, mySeat]);
 
   async function submit() {
     if (!mySeat || !myPositionLabel) return;
@@ -91,13 +127,15 @@ export function RecapPanel({
       <h3 style={{ marginTop: 0 }}>Game over</h3>
       <div style={{ marginBottom: 12 }}>{resultSummary}</div>
       {mySeat &&
-        (state.kind === 'dismissed' || state.kind === 'submitted' ? (
+        (state.kind === 'checking' ? null : state.kind === 'dismissed' || state.kind === 'submitted' || state.kind === 'already-submitted' ? (
           <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-            {state.kind === 'submitted'
-              ? state.allNew
-                ? 'Thanks for the feedback!'
-                : 'Thanks! (Some of these were already on file and were left unchanged.)'
-              : 'Skipped.'}
+            {state.kind === 'already-submitted'
+              ? 'You already left feedback for this game.'
+              : state.kind === 'submitted'
+                ? state.allNew
+                  ? 'Thanks for the feedback!'
+                  : 'Thanks! (Some of these were already on file and were left unchanged.)'
+                : 'Skipped.'}
           </p>
         ) : (
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>

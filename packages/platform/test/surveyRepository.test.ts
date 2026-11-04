@@ -101,6 +101,29 @@ describe('InMemorySurveyRepository', () => {
     expect(await repo.getReadAt('owner@example.com', 'tashkalar')).toBe(12345);
   });
 
+  it('getAnsweredQuestionIds() returns [] for a (roomId, seat) with no responses at all', async () => {
+    const repo = new InMemorySurveyRepository();
+    expect(await repo.getAnsweredQuestionIds('room-1', 'red')).toEqual([]);
+  });
+
+  it('getAnsweredQuestionIds() returns every questionId already answered for that (roomId, seat)', async () => {
+    const repo = new InMemorySurveyRepository();
+    await repo.submit(response({ roomId: 'room-1', seat: 'red', questionId: 'fun' }));
+    await repo.submit(response({ roomId: 'room-1', seat: 'red', questionId: 'bugs' }));
+
+    const found = await repo.getAnsweredQuestionIds('room-1', 'red');
+    expect(found.sort()).toEqual(['bugs', 'fun']);
+  });
+
+  it('getAnsweredQuestionIds() is scoped to the exact (roomId, seat) — a different seat or room never leaks in', async () => {
+    const repo = new InMemorySurveyRepository();
+    await repo.submit(response({ roomId: 'room-1', seat: 'red', questionId: 'fun' }));
+    await repo.submit(response({ roomId: 'room-1', seat: 'blue', questionId: 'bugs' }));
+    await repo.submit(response({ roomId: 'room-2', seat: 'red', questionId: 'memorable' }));
+
+    expect(await repo.getAnsweredQuestionIds('room-1', 'red')).toEqual(['fun']);
+  });
+
   it('markRead() overwrites a previous read time for the same (email, gameId), and keys separately per game', async () => {
     const repo = new InMemorySurveyRepository();
     await repo.markRead('owner@example.com', 'tashkalar', 100);

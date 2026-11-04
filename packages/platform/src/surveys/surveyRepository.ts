@@ -17,6 +17,8 @@ export interface SurveyRepository {
   submit(response: Omit<SurveyResponse, 'createdAt'>): Promise<{ stored: boolean }>;
   /** Every response for a game, newest first. */
   listForGame(gameId: string): Promise<SurveyResponse[]>;
+  /** Every questionId this (roomId, seat) has ever answered — lets a client skip straight to "already submitted" instead of re-showing a blank form on every reload. */
+  getAnsweredQuestionIds(roomId: string, seat: string): Promise<string[]>;
   /** The newest `createdAt` across every response for a game, or null if it has none — the "is there new feedback" signal compared against getReadAt. */
   getLatestResponseAt(gameId: string): Promise<number | null>;
   /** When this account last viewed this game's notes page, or null if never — see NotesView. */
@@ -48,6 +50,10 @@ export class InMemorySurveyRepository implements SurveyRepository {
   async getLatestResponseAt(gameId: string): Promise<number | null> {
     const forGame = await this.listForGame(gameId);
     return forGame[0]?.createdAt ?? null;
+  }
+
+  async getAnsweredQuestionIds(roomId: string, seat: string): Promise<string[]> {
+    return [...this.responses.values()].filter((r) => r.roomId === roomId && r.seat === seat).map((r) => r.questionId);
   }
 
   async getReadAt(email: string, gameId: string): Promise<number | null> {
@@ -138,6 +144,20 @@ export class PostgresSurveyRepository implements SurveyRepository {
     } catch (error) {
       console.error(`[db] failed to read latest survey response time for ${gameId}:`, error);
       return null;
+    }
+  }
+
+  async getAnsweredQuestionIds(roomId: string, seat: string): Promise<string[]> {
+    const db = getDb();
+    if (!db) return [];
+    try {
+      const rows = await db<{ question_id: string }[]>`
+        SELECT question_id FROM survey_responses WHERE room_id = ${roomId} AND seat = ${seat}
+      `;
+      return rows.map((row) => row.question_id);
+    } catch (error) {
+      console.error(`[db] failed to read answered question ids for ${roomId}/${seat}:`, error);
+      return [];
     }
   }
 

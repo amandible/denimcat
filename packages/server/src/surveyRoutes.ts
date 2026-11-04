@@ -109,6 +109,40 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
     res.json({ ok: true, alreadyAnswered });
   });
 
+  // Lets the recap panel skip straight to "already submitted" on a reload
+  // instead of re-showing a blank form — the account's own seat only, never
+  // another player's answers. Open to any signed-in account (not owner-only
+  // like the routes below), matching POST's own auth model.
+  router.get('/:gameId/:roomCode/mine', async (req, res) => {
+    const token = bearerToken(req);
+    if (!token) {
+      res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
+      return;
+    }
+    const session = await authService.checkSession(token);
+    if (!session) {
+      res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
+      return;
+    }
+    const entry = gameStores.find((g) => g.module.id === req.params.gameId);
+    if (!entry) {
+      res.json({ ok: false, error: { code: 'UNKNOWN_GAME', message: 'No such game.' } });
+      return;
+    }
+    const room = await entry.store.getRoom(req.params.roomCode);
+    if (!room) {
+      res.json({ ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } });
+      return;
+    }
+    const seat = room.seatOrder.find((s) => room.knownAccounts[s] === session.email);
+    if (!seat) {
+      res.json({ ok: true, answeredQuestionIds: [] });
+      return;
+    }
+    const answeredQuestionIds = await surveyRepository.getAnsweredQuestionIds(room.roomId, seat);
+    res.json({ ok: true, answeredQuestionIds });
+  });
+
   router.get('/:gameId', async (req, res) => {
     const token = bearerToken(req);
     if (!token) {

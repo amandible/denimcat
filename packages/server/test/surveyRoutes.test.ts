@@ -140,6 +140,12 @@ describe('survey-responses routes', () => {
     }).then((r) => r.json());
   }
 
+  function getMyAnsweredQuestionIds(token: string | undefined, gameId: string, roomCode: string) {
+    return fetch(`${baseUrl}/survey-responses/${gameId}/${roomCode}/mine`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((r) => r.json());
+  }
+
   function markFeedbackRead(token: string | undefined, gameId: string) {
     return fetch(`${baseUrl}/survey-responses/${gameId}/read`, {
       method: 'POST',
@@ -331,6 +337,69 @@ describe('survey-responses routes', () => {
         ],
       });
       expect(result).toEqual({ ok: true, alreadyAnswered: ['fun'] });
+    });
+  });
+
+  describe('GET /survey-responses/:gameId/:roomCode/mine', () => {
+    it("returns the questionIds the signed-in account's own seat has already answered in that room", async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
+      await finishRoom(created.roomCode);
+      await submitSurvey(aliceToken, {
+        gameId: 'mint-condition',
+        roomCode: created.roomCode,
+        seat: 'p1',
+        positionLabel: 'Player 1',
+        answers: [{ questionId: 'bugs', answer: 'found one' }],
+      });
+
+      const result = await getMyAnsweredQuestionIds(aliceToken, 'mint-condition', created.roomCode);
+      expect(result).toEqual({ ok: true, answeredQuestionIds: ['bugs'] });
+    });
+
+    it('returns an empty list for a seat that has never submitted anything, rather than an error', async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
+      await finishRoom(created.roomCode);
+
+      const result = await getMyAnsweredQuestionIds(aliceToken, 'mint-condition', created.roomCode);
+      expect(result).toEqual({ ok: true, answeredQuestionIds: [] });
+    });
+
+    it("never returns another seat's answers, even in the same room", async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const bobToken = await signIn('bob@example.com');
+      const aliceSocket = await connect(aliceToken);
+      const bobSocket = await connect(bobToken);
+      const created = await emitAck<{ ok: true; roomCode: string }>(aliceSocket, 'create_room', { playerCount: 2 });
+      await emitAck(aliceSocket, 'join_room', { roomCode: created.roomCode, role: 'p1' });
+      await emitAck(bobSocket, 'join_room', { roomCode: created.roomCode, role: 'p2' });
+      await finishRoom(created.roomCode);
+      await submitSurvey(bobToken, {
+        gameId: 'mint-condition',
+        roomCode: created.roomCode,
+        seat: 'p2',
+        positionLabel: 'Player 2',
+        answers: [{ questionId: 'bugs', answer: 'found one' }],
+      });
+
+      const result = await getMyAnsweredQuestionIds(aliceToken, 'mint-condition', created.roomCode);
+      expect(result).toEqual({ ok: true, answeredQuestionIds: [] });
+    });
+
+    it('rejects when not signed in', async () => {
+      const result = await getMyAnsweredQuestionIds(undefined, 'mint-condition', 'ABCD');
+      expect(result.ok).toBe(false);
+    });
+
+    it('rejects a nonexistent room', async () => {
+      const aliceToken = await signIn('alice@example.com');
+      const result = await getMyAnsweredQuestionIds(aliceToken, 'mint-condition', 'ZZZZ');
+      expect(result.ok).toBe(false);
     });
   });
 
