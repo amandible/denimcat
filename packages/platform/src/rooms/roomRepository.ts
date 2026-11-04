@@ -120,11 +120,16 @@ export class InMemoryRoomRepository<TState, TSeat extends string> implements Roo
 }
 
 /**
- * The jsonb column comes back as a raw JSON string rather than an
- * auto-parsed object in practice (observed against a real Neon connection,
- * driver/environment dependent) — handle both shapes rather than assuming
- * one, so a future driver/config change on either side can't reintroduce
- * this as a silent crash.
+ * The jsonb column could come back as a raw JSON string rather than an
+ * auto-parsed object — this was the normal case for every room `save()`
+ * wrote before 2026-11-04: handing `postgres` an already-`JSON.stringify`'d
+ * string made it serialize that string a *second* time (its `json`/`jsonb`
+ * parameter type always calls `JSON.stringify` on whatever it's given — see
+ * `save()`, now fixed to pass `db.json(room)` instead). Kept handling both
+ * shapes here regardless, rather than assuming the fix holds forever — it's
+ * also what let the one-time migration (see scripts/) read the old rows at
+ * all — so a future driver/config change on either side still can't
+ * reintroduce this as a silent crash.
  */
 export function parsePersistedRoomData<TState, TSeat extends string>(
   raw: PersistedRoom<TState, TSeat> | string,
@@ -161,9 +166,15 @@ export class PostgresRoomRepository<TState, TSeat extends string> implements Roo
     const db = getDb();
     if (!db) return;
     try {
+      // db.json(), not JSON.stringify(room) — the latter made `postgres`
+      // serialize the already-stringified text a second time (see
+      // parsePersistedRoomData's doc comment). `as any`: TState is
+      // intentionally unconstrained everywhere else, but db.json()'s
+      // JSONValue type wants a structural guarantee TState doesn't carry;
+      // every room is JSON-serialized for the wire anyway, so it's safe.
       await db`
         INSERT INTO rooms (code, data, created_at, last_activity_at)
-        VALUES (${room.code}, ${JSON.stringify(room)}::jsonb, to_timestamp(${room.createdAt / 1000}), to_timestamp(${room.lastActivityAt / 1000}))
+        VALUES (${room.code}, ${db.json(room as any)}::jsonb, to_timestamp(${room.createdAt / 1000}), to_timestamp(${room.lastActivityAt / 1000}))
         ON CONFLICT (code) DO UPDATE
           SET data = EXCLUDED.data, last_activity_at = EXCLUDED.last_activity_at
       `;
