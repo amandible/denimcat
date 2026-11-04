@@ -19,6 +19,10 @@ export function useLoveTrianglesActions(roomCode: string, options?: { role?: str
   const [pendingRemoval, setPendingRemoval] = useState<RemovedUnplayableEvent | null>(null);
   const queueRef = useRef<LoveTrianglesEvent[]>([]);
   const processingRef = useRef(false);
+  // Always holds the latest authoritative state from the server (kept
+  // current by the effect below, independent of the animation queue) — see
+  // its use once the queue drains, below.
+  const latestGameStateRef = useRef<GameState | null>(null);
 
   const drainQueue = useCallback(() => {
     if (processingRef.current) return;
@@ -31,6 +35,19 @@ export function useLoveTrianglesActions(roomCode: string, options?: { role?: str
         processingRef.current = false;
         setAnimating(false);
         setPendingRemoval(null);
+        // Each queued event's own `.state` snapshot was captured engine-side
+        // before any later-in-the-same-action step ran — a buy that ends
+        // the game is the clearest case: `applyGameEndIfDone` runs AFTER
+        // the 'purchased'/'refilled' events are already built, so neither
+        // ever carries `phase: 'ended'`/`winner`. Left alone, the queue
+        // draining to empty would leave `displayedState` permanently stuck
+        // on that last pre-end snapshot — and the "self-healing resync"
+        // effect below can lose the race against a long animation (a
+        // `removed_unplayable` alone holds for over a second), so it can't
+        // be relied on to catch this. Reconciling with the true latest
+        // state right here, the moment the queue empties, closes the gap
+        // unconditionally rather than hoping a timer wins.
+        if (latestGameStateRef.current) setDisplayedState(latestGameStateRef.current);
         return;
       }
 
@@ -66,6 +83,10 @@ export function useLoveTrianglesActions(roomCode: string, options?: { role?: str
     ...options,
     extraListeners: { love_triangles_events: handleEvents },
   });
+
+  useEffect(() => {
+    latestGameStateRef.current = connection.gameState;
+  }, [connection.gameState]);
 
   // Reset when leaving 'in-room' (e.g. leaveSeat, or a fresh reconnect
   // still pending) so the next arrival re-seeds cleanly instead of keeping
