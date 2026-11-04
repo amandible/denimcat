@@ -5,8 +5,9 @@ import { createNoopEmailSender, type EmailSender } from '../email';
 import type { GameModule } from '../gameModule';
 import type { RoomRepository } from './roomRepository';
 import type { LiveRoom, RoomStoreContext } from './roomStoreContext';
-import { applyAction as applyActionImpl, createRoom as createRoomImpl, getRoom as getRoomImpl, getRoomInfo as getRoomInfoImpl, persist, resyncAfterJoin as resyncAfterJoinImpl, startGraceTimer, clearGraceTimer } from './roomCore';
-import { broadcastRoomInfo, viewFor } from './roomBroadcast';
+import { applyAction as applyActionImpl, createRoom as createRoomImpl, getRoom as getRoomImpl, getRoomInfo as getRoomInfoImpl, persist, resyncAfterJoin as resyncAfterJoinImpl, clearGraceTimer } from './roomCore';
+import { broadcastRoomInfo } from './roomBroadcast';
+import { joinRoom as joinRoomImpl, reconnectRoom as reconnectRoomImpl, reconnectByAccount as reconnectByAccountImpl, leaveSeat as leaveSeatImpl, handleDisconnect as handleDisconnectImpl } from './roomMembership';
 
 const RECONNECT_GRACE_MS = 2 * 60 * 1000;
 const IDLE_SWEEP_INTERVAL_MS = 60 * 1000;
@@ -122,194 +123,24 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
     return getRoomImpl(this.ctx, code);
   }
 
-  async joinRoom(
-    code: string,
-    role: Role<TSeat>,
-    socketId: string,
-    email?: string,
-    name?: string,
-    accountEmail?: string,
-  ): Promise<JoinResult<TSeat, unknown>> {
-    const room = await this.getRoom(code);
-    if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
-
-    if (role === 'spectator') {
-      room.spectatorSocketIds.add(socketId);
-      this.ctx.socketBindings.set(socketId, { code, role: 'spectator' });
-      broadcastRoomInfo(this.ctx, room);
-      return { ok: true, gameState: viewFor(this.ctx, room, 'spectator'), you: { role: 'spectator' } };
-    }
-
-    if (!room.seatOrder.includes(role)) {
-      return { ok: false, error: { code: 'SEAT_NOT_IN_GAME', message: `No such seat for this room.` } };
-    }
-
-    const seat = room.seats[role];
-    if (seat && seat.disconnectedAt !== null) {
-      return {
-        ok: false,
-        error: {
-          code: 'SEAT_RECONNECTING',
-          message: `${role} disconnected recently; reconnect with the original seat token instead.`,
-        },
-      };
-    }
-    if (seat) {
-      return { ok: false, error: { code: 'SEAT_TAKEN', message: `${role} is already taken.` } };
-    }
-    // The live record can be gone (expired after the ordinary reconnect
-    // grace) while the seat is still genuinely owned — knownAccounts is the
-    // durable record of who actually claimed it, and that claim survives a
-    // lapsed connection. Without this check, a brand-new visitor's plain
-    // join_room would indistinguishably look like the seat was never
-    // joined, silently taking over the real owner's identity (and whatever
-    // moves they'd already made) the moment their tab happened to be
-    // closed for a couple of minutes. The real owner isn't locked out by
-    // this — accountEmail matching knownAccounts[role] still passes through.
-    const existingOwner = room.knownAccounts[role];
-    if (existingOwner && existingOwner !== accountEmail) {
-      return { ok: false, error: { code: 'SEAT_TAKEN', message: `${role} is already taken.` } };
-    }
-
-    const seatToken = nanoid(21);
-    room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name };
-    if (email) room.knownEmails[role] = email;
-    if (name) room.knownNames[role] = name;
-    if (accountEmail) room.knownAccounts[role] = accountEmail;
-    // An account arriving into an already-finished room has, by definition,
-    // just seen it — see PersistedRoom.recapViewedBy's doc comment. Rare in
-    // practice for a fresh join (seats are normally all filled before a
-    // game ends), but harmless and correct if it happens.
-    if (accountEmail && this.ctx.module.isRoomFinished?.(room.gameState)) room.recapViewedBy[accountEmail] = true;
-    this.ctx.socketBindings.set(socketId, { code, role });
-    room.lastActivityAt = Date.now();
-    await persist(this.ctx, room);
-    broadcastRoomInfo(this.ctx, room);
-    return { ok: true, seatToken, gameState: viewFor(this.ctx, room, role), you: { role } };
+  async joinRoom(code: string, role: Role<TSeat>, socketId: string, email?: string, name?: string, accountEmail?: string): Promise<JoinResult<TSeat, unknown>> {
+    return joinRoomImpl(this.ctx, code, role, socketId, email, name, accountEmail);
   }
 
   async reconnectRoom(code: string, role: TSeat, seatToken: string, socketId: string, accountEmail?: string): Promise<JoinResult<TSeat, unknown>> {
-    const room = await this.getRoom(code);
-    if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
-
-    const seat = room.seats[role];
-    if (!seat || seat.seatToken !== seatToken) {
-      return { ok: false, error: { code: 'INVALID_TOKEN', message: 'Seat token does not match.' } };
-    }
-
-    clearGraceTimer(this.ctx, code, role);
-    seat.socketId = socketId;
-    seat.disconnectedAt = null;
-    // Backfills knownAccounts for a seat that predates this feature, or was
-    // last (re)joined before this browser's account was known — the very
-    // next account-based reconnect attempt (any device) then just works.
-    // Never overwrites an existing DIFFERENT account: a seat token lives in
-    // browser-scoped localStorage, not account-scoped storage, so a second
-    // account signed in on the same browser could otherwise present this
-    // seat's stored token and silently reassign ownership away from the
-    // account that actually holds it.
-    if (accountEmail && !room.knownAccounts[role]) room.knownAccounts[role] = accountEmail;
-    // See joinRoom's identical comment — this account has just seen the
-    // room's current state, which is "finished" here.
-    if (accountEmail && this.ctx.module.isRoomFinished?.(room.gameState)) room.recapViewedBy[accountEmail] = true;
-    this.ctx.socketBindings.set(socketId, { code, role });
-    room.lastActivityAt = Date.now();
-    await persist(this.ctx, room);
-    this.ctx.nsp.to(code).emit('seat_taken_over', { role });
-    broadcastRoomInfo(this.ctx, room);
-    return { ok: true, gameState: viewFor(this.ctx, room, role), you: { role } };
+    return reconnectRoomImpl(this.ctx, code, role, seatToken, socketId, accountEmail);
   }
 
-  /**
-   * Tried by a browser with no locally-stored seat token for this room
-   * (see roomHandlers.ts's reconnect_by_account): finds whichever seat
-   * `accountEmail` has ever held (knownAccounts, which — unlike the live
-   * `seats` map — survives a lapsed reconnect grace) and reclaims it,
-   * either by taking over a still-live seat (identical semantics to
-   * reconnectRoom's own unconditional takeover — same precedent, just
-   * reached via account identity instead of a possessed token) or, if the
-   * seat's live record already expired, rejoining fresh against the same
-   * underlying game state (seat state lives in `gameState`, keyed by seat
-   * id, untouched by a seat's own live-record expiry). `fallbackName` is
-   * only used in that second case, to avoid a seat silently going nameless
-   * once its original LiveSeat.name is gone (no lobby screen is shown to
-   * ask again — this whole path is silent-by-design).
-   */
   async reconnectByAccount(code: string, accountEmail: string, socketId: string, fallbackName?: string): Promise<JoinResult<TSeat, unknown>> {
-    const room = await this.getRoom(code);
-    if (!room) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'No such room.' } };
-
-    const role = room.seatOrder.find((seat) => room.knownAccounts[seat] === accountEmail);
-    if (!role) {
-      return { ok: false, error: { code: 'NO_OWNED_SEAT', message: 'No seat in this room is associated with your account.' } };
-    }
-
-    // See joinRoom's identical comment — this account has just seen the
-    // room's current state, which is "finished" here. Applies to both
-    // branches below (live takeover and fresh-rejoin alike).
-    if (this.ctx.module.isRoomFinished?.(room.gameState)) room.recapViewedBy[accountEmail] = true;
-
-    const existing = room.seats[role];
-    if (existing) {
-      clearGraceTimer(this.ctx, code, role);
-      existing.socketId = socketId;
-      existing.disconnectedAt = null;
-      this.ctx.socketBindings.set(socketId, { code, role });
-      room.lastActivityAt = Date.now();
-      await persist(this.ctx, room);
-      this.ctx.nsp.to(code).emit('seat_taken_over', { role });
-      broadcastRoomInfo(this.ctx, room);
-      return { ok: true, seatToken: existing.seatToken, gameState: viewFor(this.ctx, room, role), you: { role } };
-    }
-
-    const seatToken = nanoid(21);
-    const email = room.knownEmails[role]; // carry forward whatever notify preference this seat last had
-    room.seats[role] = { seatToken, socketId, disconnectedAt: null, email, name: fallbackName };
-    if (fallbackName) room.knownNames[role] = fallbackName;
-    this.ctx.socketBindings.set(socketId, { code, role });
-    room.lastActivityAt = Date.now();
-    await persist(this.ctx, room);
-    broadcastRoomInfo(this.ctx, room);
-    return { ok: true, seatToken, gameState: viewFor(this.ctx, room, role), you: { role } };
+    return reconnectByAccountImpl(this.ctx, code, accountEmail, socketId, fallbackName);
   }
 
   async leaveSeat(code: string, socketId: string): Promise<void> {
-    const room = await this.getRoom(code);
-    const binding = this.ctx.socketBindings.get(socketId);
-    if (!room || !binding || binding.code !== code) return;
-
-    if (binding.role === 'spectator') {
-      room.spectatorSocketIds.delete(socketId);
-    } else {
-      clearGraceTimer(this.ctx, code, binding.role);
-      delete room.seats[binding.role];
-      await persist(this.ctx, room);
-      this.ctx.nsp.to(code).emit('seat_freed', { role: binding.role });
-    }
-    this.ctx.socketBindings.delete(socketId);
-    broadcastRoomInfo(this.ctx, room);
+    return leaveSeatImpl(this.ctx, code, socketId);
   }
 
   async handleDisconnect(socketId: string): Promise<void> {
-    const binding = this.ctx.socketBindings.get(socketId);
-    if (!binding) return;
-    this.ctx.socketBindings.delete(socketId);
-
-    const room = await this.getRoom(binding.code);
-    if (!room) return;
-
-    if (binding.role === 'spectator') {
-      room.spectatorSocketIds.delete(socketId);
-      broadcastRoomInfo(this.ctx, room);
-      return;
-    }
-
-    const seat = room.seats[binding.role];
-    if (!seat || seat.socketId !== socketId) return; // stale binding, already superseded
-    seat.socketId = null;
-    seat.disconnectedAt = Date.now();
-    broadcastRoomInfo(this.ctx, room);
-    startGraceTimer(this.ctx, binding.code, binding.role);
+    return handleDisconnectImpl(this.ctx, socketId);
   }
 
   async applyAction(code: string, socketId: string, action: (state: TState, seat: TSeat) => import('@denimcat/shared').EngineResult<TState, any>): Promise<ActionResult> {
