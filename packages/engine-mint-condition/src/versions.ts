@@ -1,4 +1,4 @@
-import type { RulesetVersion } from '@denimcat/platform';
+import type { RulesetVersion } from '@denimcat/shared';
 import { v1Ruleset } from './prizes';
 import { v2Ruleset } from './rulesetV2';
 import type { MintConditionRuleset } from './ruleset';
