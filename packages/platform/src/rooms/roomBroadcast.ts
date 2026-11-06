@@ -75,6 +75,8 @@ export function buildRoomInfo<TState, TConfig, TSeat extends string>(
     seats,
     spectatorCount: room.spectatorSocketIds.size,
     chatMessages: room.chatMessages,
+    rulesetVersion: room.rulesetVersion,
+    rulesetNotice: ctx.module.describeRulesetVersion?.(room.rulesetVersion) ?? undefined,
   };
 }
 

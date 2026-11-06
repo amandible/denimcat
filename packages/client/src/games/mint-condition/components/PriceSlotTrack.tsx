@@ -8,6 +8,7 @@ export function PriceSlotTrack({
   hoveredSlotIndex,
   placeableSlots,
   onPlaceInSlot,
+  hoverRewardHint,
 }: {
   slots: PriceSlot[];
   onPrizeClick?: (prizeId: string) => void;
@@ -19,9 +20,12 @@ export function PriceSlotTrack({
    * eligibleSlotIndex (the actual post-win prize-choice slot; the two
    * never apply at the same time, since bidding and prize-choice are
    * different game phases). If that slot is empty, also shows a reminder
-   * of the three consolation rewards a bid landing there would trigger.
+   * of the consolation reward a bid landing there would trigger —
+   * version-specific wording, see `hoverRewardHint`.
    */
   hoveredSlotIndex?: number;
+  /** Caller-supplied so the hint text matches whichever ruleset version the room is pinned to — see GameView.tsx. */
+  hoverRewardHint?: string;
   /**
    * When set, the track enters "placing a new prize" mode: slots at these
    * indices become clickable (via onPlaceInSlot) regardless of whether they
@@ -67,7 +71,7 @@ export function PriceSlotTrack({
               {isLockedForPlacement && <span style={{ color: 'var(--muted)', fontSize: 13 }}>🔒 locked</span>}
               {isHovered && slot.prizes.length === 0 && (
                 <span style={{ color: 'var(--accent)', fontSize: 12 }}>
-                  Reward if you bid here: +1 money card, +1 extra space, or +1 prize
+                  {hoverRewardHint ?? 'Reward if you bid here: +1 money card, +1 extra space, or +1 prize'}
                 </span>
               )}
             </div>

@@ -1,0 +1,85 @@
+/**
+ * v2's own complete, correct rules text — not a diff against v1's
+ * RulesContent.tsx. Only three paragraphs actually changed (post-auction
+ * draws, the empty-slot reward, and new-prize placement); everything
+ * else below is identical to v1's wording on purpose, since none of it
+ * changed. See docs/guides/game-rule-versions.md.
+ */
+export function RulesContentV2() {
+  return (
+    <>
+      <p>The game seats 2-4 players. Each player has a personal deck of money cards, numbered 1-13.</p>
+      <p>The players will compete, over a series of auctions, to buy prize cards.</p>
+
+      <h4>Setup</h4>
+      <p>
+        The six cost slots come from six double-sided tiles, each randomly showing one of its two printed
+        cost: 2/4, 5/9, 7/11, 13/15, 16/20, and 22/24 — randomize the sides, then arrange them from low to high.
+      </p>
+      <p>
+        Three prizes are drawn and placed in the second, third, and fourth cost slots. (Each slot can hold
+        one or more prizes, or be empty.) Each player draws two cards from their money deck. The game begins.
+      </p>
+
+      <h4>Auctions</h4>
+      <p>
+        Each auction starts with the player who won the previous one. (For the first auction of the game,
+        choose randomly.)
+      </p>
+      <p>
+        To bid, a player must say a number that they could pay exactly by spending one or
+        more cards from their hand; they may also pass, in which case they may not bid again in this auction.
+        Following players in turn may raise the bid (again saying a number they could pay exactly)
+        or pass. When all but one player has passed, the winning player pays their bid
+        and takes one prize from the corresponding slot; if the bid is not equal to a cost, they take
+        from the next lower slot.
+        In other words, if the first two slots cost 3 and 8, then any bid between 3 and 7
+        gets you a prize from the lowest slot.
+      </p>
+      <p>
+        No change is given! If you bid 20 and the next lowest slot costs 15, you still pay 20.
+      </p>
+      <p>
+        All unbought prizes in the display move up one slot. The newly revealed prize always goes into the
+        lowest slot. The first two players to pass this auction (not the winner) each then draw a card from
+        their money decks — in a two-player game, that's simply whoever didn't win.
+      </p>
+      <p>
+        A card that moves up out of the highest slot in the display is discarded permanently; a randomly
+        drawn prize enters in the lowest slot to replace it.
+      </p>
+      <p>
+        When a player wins with a bid that points to an empty slot, or a bid lower than the lowest slot, they
+        always draw extra money cards: 2 cards if their bid pointed to one of the two cheapest slots (or
+        didn't even reach the cheapest slot's cost), 3 cards for the two middle slots, or 4 cards for the two
+        priciest slots. On top of that guaranteed draw, they may also choose — independently, any combination,
+        including neither — to move all prizes in the display up one extra space, and/or to add an
+        additional prize to the lowest slot.
+      </p>
+
+      <h4>Prizes &amp; point values</h4>
+      <p>For a two-player game:</p>
+      <ul style={{ marginTop: 4 }}>
+        <li>Yellow: 5, 1, 1, 1</li>
+        <li>Blue: 4, 2, 2, 1</li>
+        <li>Red: 3, 3, 2, 1</li>
+      </ul>
+      <p>With a third player, add:</p>
+      <ul style={{ marginTop: 4 }}>
+        <li>Green: 4, 3, 2, 0</li>
+        <li>Purple: 5, 4</li>
+      </ul>
+      <p>With a fourth player, add:</p>
+      <ul style={{ marginTop: 4 }}>
+        <li>Purple: 0, 0 (on top of the 5, 4 above)</li>
+        <li>Orange: 2, 2, 2, 2</li>
+      </ul>
+
+      <h4>Scoring</h4>
+      <p>
+        At the end of the game, a player gets a bonus for their most common color: 1 point for 1 card, 3 for
+        2, 6 for 3, 10 for 4, and so on (each step adds one more than the last).
+      </p>
+    </>
+  );
+}

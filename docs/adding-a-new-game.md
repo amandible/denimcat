@@ -1,5 +1,8 @@
 # Adding a new game
 
+If this game is getting its second-ever ruleset version (not a brand-new
+game), see `docs/guides/game-rule-versions.md` instead/first.
+
 A checklist for implementing a new game on the denimcat platform, derived
 from how Hyper Bloom, Mint Condition, Love Triangles, Tash-Kalar, and
 King's Gate are actually built — not aspirational, just what's there.

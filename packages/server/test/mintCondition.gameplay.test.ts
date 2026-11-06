@@ -190,7 +190,13 @@ describe('Mint Condition room + game flow over real sockets', () => {
     if (eligibleSlot) {
       after = await emitAck<any>(sockets[activeSeat], 'take_prize', { roomCode, prizeId: eligibleSlot.prizes[0].id });
     } else {
-      after = await emitAck<any>(sockets[activeSeat], 'choose_auction_reward', { roomCode, reward: 'draw_cards' });
+      // A fresh room is pinned to the current ruleset version (v2 as of
+      // this writing — see engine-mint-condition's versions.ts), whose
+      // reward choice is the two-boolean shape, not v1's three-way string.
+      after = await emitAck<any>(sockets[activeSeat], 'choose_auction_reward', {
+        roomCode,
+        reward: { extraShift: false, addPrize: false },
+      });
     }
     expect(after.ok).toBe(true);
 

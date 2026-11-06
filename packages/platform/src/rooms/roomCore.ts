@@ -33,6 +33,7 @@ export async function createRoom<TState, TConfig, TSeat extends string>(
     knownNames: {},
     chatMessages: [],
     recapViewedBy: {},
+    rulesetVersion: ctx.module.currentRulesetVersionId,
     spectatorSocketIds: new Set(),
     createdAt: now,
     lastActivityAt: now,
@@ -95,6 +96,7 @@ async function hydrateRoom<TState, TConfig, TSeat extends string>(
     knownNames,
     chatMessages: persisted.chatMessages ?? [],
     recapViewedBy: { ...persisted.recapViewedBy },
+    rulesetVersion: persisted.rulesetVersion,
     spectatorSocketIds: new Set(),
     createdAt: persisted.createdAt,
     lastActivityAt: persisted.lastActivityAt,
@@ -127,6 +129,7 @@ export async function persist<TState, TConfig, TSeat extends string>(
     knownNames: { ...room.knownNames },
     chatMessages: [...room.chatMessages],
     recapViewedBy: { ...room.recapViewedBy },
+    rulesetVersion: room.rulesetVersion,
     createdAt: room.createdAt,
     lastActivityAt: room.lastActivityAt,
   };

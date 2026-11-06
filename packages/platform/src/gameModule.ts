@@ -53,4 +53,26 @@ export interface GameModule<TState, TConfig, TSeat extends string> {
   isRoomFinished?(state: TState): boolean;
   /** Builds this game's own room URL path (e.g. `/tashkalar/room/ABCD`) for a turn-notification email's reconnect link. Omit to send notifications without a clickable link. */
   roomUrlPath?(code: string): string;
+  /**
+   * The id of whichever RulesetVersion a BRAND-NEW room should be pinned
+   * to right now — copied onto PersistedRoom.rulesetVersion at creation
+   * time (see createRoom in roomCore.ts) and never touched again for
+   * that room's lifetime. Omit entirely for a game that has only ever
+   * had one ruleset — the overwhelming majority of games on this
+   * platform. See docs/guides/game-rule-versions.md for when (and how)
+   * to introduce this.
+   */
+  currentRulesetVersionId?: string;
+  /**
+   * Human-readable text for the ruleset version a room is pinned to
+   * (its PersistedRoom.rulesetVersion), surfaced generically via
+   * RoomInfo so the client can show a "what's new" notice and a
+   * stale-version caveat without the platform needing to know this
+   * game's own RulesetVersion/ruleset types. `versionId` is exactly
+   * room.rulesetVersion (undefined for a room persisted before this
+   * game ever introduced versioning at all — treat that the same as
+   * this game's very first version). Omit entirely for a game with
+   * only one ruleset ever.
+   */
+  describeRulesetVersion?(versionId: string | undefined): { designerNote: string; whatsNew?: string; isCurrentVersion: boolean } | null;
 }

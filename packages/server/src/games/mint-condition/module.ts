@@ -1,6 +1,8 @@
 import {
   dealGame,
   toView,
+  CURRENT_RULESET_VERSION_ID,
+  describeRulesetVersion,
   type GameState,
   type MintConditionConfig,
   type PlayerCount,
@@ -50,4 +52,7 @@ export const mintConditionModule: GameModule<GameState, MintConditionConfig, Sea
   },
   isRoomFinished: (state) => state.phase === 'ended',
   roomUrlPath: (code) => `/mint-condition/room/${code}`,
+
+  currentRulesetVersionId: CURRENT_RULESET_VERSION_ID,
+  describeRulesetVersion,
 };

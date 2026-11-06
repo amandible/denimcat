@@ -1,4 +1,5 @@
 export * from './gameModule';
+export * from './rulesetVersion';
 export { type EmailSender, createDefaultEmailSender, createNoopEmailSender, createResendEmailSender } from './email';
 export { RoomStore, type RoomStoreOptions, type OpenGameSummary } from './rooms/roomStore';
 export {

@@ -31,6 +31,8 @@ export interface LiveRoom<TState, TSeat extends string> {
   chatMessages: ChatMessage[];
   /** See PersistedRoom.recapViewedBy's doc comment — keyed by account email, not seat. */
   recapViewedBy: Record<string, true>;
+  /** See PersistedRoom.rulesetVersion's doc comment. Genuinely undefined for most games/rooms, not just "not yet populated." */
+  rulesetVersion?: string;
   spectatorSocketIds: Set<string>;
   createdAt: number;
   lastActivityAt: number;

@@ -84,6 +84,19 @@ export interface PersistedRoom<TState, TSeat extends string> {
    * existed — RoomStore.hydrateRoom defaults it to {}.
    */
   recapViewedBy?: Record<string, true>;
+  /**
+   * The id of the RulesetVersion this room is permanently pinned to,
+   * copied from GameModule.currentRulesetVersionId at creation time
+   * (see createRoom in roomCore.ts) and never updated afterward — a
+   * room's rules never silently migrate mid-game. Undefined means
+   * either (a) this game has never introduced more than one ruleset
+   * version, or (b) this room was persisted before the game introduced
+   * versioning at all — a game's own resolveRuleset() helper is
+   * responsible for treating undefined as "that game's original/first
+   * version," NOT as "whatever's current now." The platform itself
+   * never interprets this value — see docs/guides/game-rule-versions.md.
+   */
+  rulesetVersion?: string;
   createdAt: number;
   lastActivityAt: number;
 }

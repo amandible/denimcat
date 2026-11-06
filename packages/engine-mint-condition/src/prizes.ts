@@ -1,4 +1,5 @@
 import type { EngineResult, GameState, PrizeCard, SeatId } from './types';
+import type { AuctionRewardChoiceV2, MintConditionRuleset } from './ruleset';
 import { cloneState, pushLog, startAuction } from './state';
 import { ok, err } from './result';
 import { drawCardForSeat, drawPostAuctionCards } from './decks';
@@ -54,12 +55,19 @@ export function shiftDisplay(state: GameState): GameState {
   return next;
 }
 
-/** Draws for the winner + first passer, then either ends the game or opens the next auction. */
-function concludeAuction(state: GameState): GameState {
+/**
+ * Draws post-auction cards, then either ends the game or opens the next
+ * auction. Exported (a visibility change only, no behavior change) so a
+ * sibling version-2 ruleset file can reuse it unchanged — see
+ * docs/guides/game-rule-versions.md. `rules` is threaded through only
+ * because the draw rule itself is overridable (MintConditionRuleset.drawPostAuctionCards);
+ * everything else here is identical across every version.
+ */
+export function concludeAuction(state: GameState, rules: MintConditionRuleset = v1Ruleset): GameState {
   const winnerSeat = state.auction.winnerSeat as SeatId;
   const firstPasserSeat = state.auction.passedSeats[0] ?? null;
 
-  let next = drawPostAuctionCards(state, winnerSeat, firstPasserSeat);
+  let next = rules.drawPostAuctionCards(state, winnerSeat, firstPasserSeat);
   next = applyGameEndIfDone(next);
   if (next.phase === 'ended') return next;
 
@@ -77,9 +85,16 @@ function concludeAuction(state: GameState): GameState {
  * "add two prizes to the lowest slot" reward needs this exact slot (so the
  * new prizes land in the slot the shift just emptied, rather than being
  * immediately swept up by it) and needs to be accounted for before
- * deciding whether the game just ended.
+ * deciding whether the game just ended. Exported (visibility change only)
+ * for the same reason as concludeAuction above. `rules` sits before
+ * `afterShift` since `rules` is supplied by every caller while
+ * `afterShift` is specific to one reward's own extra step.
  */
-function afterPrizeChoice(state: GameState, afterShift?: (s: GameState) => GameState): GameState {
+export function afterPrizeChoice(
+  state: GameState,
+  rules: MintConditionRuleset = v1Ruleset,
+  afterShift?: (s: GameState) => GameState,
+): GameState {
   let next = shiftDisplay(state);
   if (afterShift) next = afterShift(next);
   next = applyGameEndIfDone(next);
@@ -94,7 +109,7 @@ function afterPrizeChoice(state: GameState, afterShift?: (s: GameState) => GameS
     next.phase = 'awaiting-new-prize-placement';
     return next;
   }
-  return concludeAuction(next);
+  return concludeAuction(next, rules);
 }
 
 /**
@@ -133,7 +148,7 @@ export function eligibleTakeSlotIndex(priceSlots: GameState['priceSlots'], bidAm
   return slotIndex !== null && priceSlots[slotIndex].prizes.length > 0 ? slotIndex : null;
 }
 
-export function takePrize(state: GameState, seat: SeatId, prizeId: string): EngineResult {
+export function takePrize(state: GameState, seat: SeatId, prizeId: string, rules: MintConditionRuleset = v1Ruleset): EngineResult {
   if (state.phase !== 'awaiting-prize-choice') {
     return err('NOT_AWAITING_PRIZE_CHOICE', 'No prize is currently waiting to be chosen.');
   }
@@ -160,7 +175,7 @@ export function takePrize(state: GameState, seat: SeatId, prizeId: string): Engi
   next.players[seat].wonPrizes = [...next.players[seat].wonPrizes, prize];
   pushLog(next, `${seat} took the ${prize.color} ${prize.points}-point prize.`);
 
-  return ok(afterPrizeChoice(next));
+  return ok(afterPrizeChoice(next, rules));
 }
 
 export type AuctionReward = 'draw_cards' | 'extra_shift' | 'add_prizes';
@@ -183,12 +198,20 @@ export type AuctionReward = 'draw_cards' | 'extra_shift' | 'add_prizes';
  * Each fails soft (no card/prize) if its own deck is already dry, same
  * convention as every other deck-exhaustion point in this engine.
  */
-export function chooseAuctionReward(state: GameState, seat: SeatId, reward: AuctionReward): EngineResult {
+export function chooseAuctionReward(
+  state: GameState,
+  seat: SeatId,
+  reward: AuctionReward | AuctionRewardChoiceV2,
+  rules: MintConditionRuleset = v1Ruleset,
+): EngineResult {
   if (state.phase !== 'awaiting-prize-choice') {
     return err('NOT_AWAITING_PRIZE_CHOICE', 'No prize is currently waiting to be chosen.');
   }
   if (state.auction.winnerSeat !== seat) {
     return err('NOT_THE_WINNER', 'Only the auction winner may choose a reward.');
+  }
+  if (typeof reward !== 'string') {
+    return err('INVALID_REWARD', 'This room expects the original three-way reward choice.');
   }
 
   const bidAmount = (state.auction.highestBid as NonNullable<GameState['auction']['highestBid']>).amount;
@@ -199,19 +222,19 @@ export function chooseAuctionReward(state: GameState, seat: SeatId, reward: Auct
   if (reward === 'draw_cards') {
     const next = drawCardForSeat(state, seat);
     pushLog(next, `${seat} took no prize this round — drew an extra card instead.`);
-    return ok(afterPrizeChoice(next));
+    return ok(afterPrizeChoice(next, rules));
   }
 
   if (reward === 'extra_shift') {
     const next = shiftDisplay(state);
     pushLog(next, `${seat} took no prize this round — shifted the display an extra space instead.`);
-    return ok(afterPrizeChoice(next));
+    return ok(afterPrizeChoice(next, rules));
   }
 
   const next = cloneState(state);
   pushLog(next, `${seat} took no prize this round — added a prize to the lowest slot instead.`);
   return ok(
-    afterPrizeChoice(next, (s) => {
+    afterPrizeChoice(next, rules, (s) => {
       if (s.prizeDeck.length === 0) return s;
       const drawn = s.prizeDeck.pop()!;
       s.priceSlots[0].prizes = [...s.priceSlots[0].prizes, drawn];
@@ -228,7 +251,12 @@ export function chooseAuctionReward(state: GameState, seat: SeatId, reward: Auct
  * choice-within-a-slot to matter). Only the upper-slot natural-unlock gate
  * still restricts which slots are legal targets.
  */
-export function placeNewPrize(state: GameState, seat: SeatId, slotIndex: number): EngineResult {
+export function placeNewPrize(
+  state: GameState,
+  seat: SeatId,
+  slotIndex: number,
+  rules: MintConditionRuleset = v1Ruleset,
+): EngineResult {
   if (state.phase !== 'awaiting-new-prize-placement') {
     return err('NOT_AWAITING_PLACEMENT', 'No newly revealed prize is waiting to be placed.');
   }
@@ -253,5 +281,12 @@ export function placeNewPrize(state: GameState, seat: SeatId, slotIndex: number)
   next.priceSlots[slotIndex].prizes = [...next.priceSlots[slotIndex].prizes, revealed];
   pushLog(next, `${seat} placed the new ${revealed.color} ${revealed.points}-point prize into the ${next.priceSlots[slotIndex].price}-price slot.`);
 
-  return ok(concludeAuction(next));
+  return ok(concludeAuction(next, rules));
 }
+
+/**
+ * v1's own ruleset, built from the functions above exactly as they exist
+ * — the baseline every version's default `rules` parameter falls back
+ * to. See docs/guides/game-rule-versions.md.
+ */
+export const v1Ruleset: MintConditionRuleset = { drawPostAuctionCards, chooseAuctionReward, placeNewPrize };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { eligibleTakeSlotIndex, slotIndexForBid, type SeatId } from '@denimcat/engine-mint-condition';
+import { cardsForRewardTier, eligibleTakeSlotIndex, slotIndexForBid, type SeatId } from '@denimcat/engine-mint-condition';
 import type { MintConditionConnection } from './useMintConditionActions';
 import { PriceSlotTrack } from './components/PriceSlotTrack';
 import { AuctionStatusPanel } from './components/AuctionStatusPanel';
@@ -7,11 +7,14 @@ import { YourHand } from './components/YourHand';
 import { BidOptionsList } from './components/BidOptionsList';
 import { PassButton } from './components/PassButton';
 import { PrizeChoicePanel } from './components/PrizeChoicePanel';
+import { PrizeChoicePanelV2 } from './components/PrizeChoicePanelV2';
 import { NewPrizeSlotPicker } from './components/NewPrizeSlotPicker';
+import { NewPrizeSlotPickerV2 } from './components/NewPrizeSlotPickerV2';
 import { ScoreBoard } from './components/ScoreBoard';
 import { PlayerCounts } from './components/PlayerCounts';
-import { RulesContent } from './components/RulesContent';
+import { resolveRulesContent } from './rulesVersions';
 import { RulesModal } from '../../components/RulesModal';
+import { WhatsNewNotice } from '../../components/WhatsNewNotice';
 import { ActivityPanel } from '../../components/ActivityPanel';
 import { RecapPanel } from '../../components/RecapPanel';
 import { playerLabel, substituteSeatTokens } from '../../playerLabel';
@@ -22,6 +25,12 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   const [showRules, setShowRules] = useState(false);
   const [hoveredBidAmount, setHoveredBidAmount] = useState<number | null>(null);
   if (!gameState || !you) return null;
+
+  // See docs/guides/game-rule-versions.md — undefined means either v1 or
+  // a room older than versioning itself, both treated as "v1" here too.
+  const rulesetVersion = connection.roomInfo?.rulesetVersion;
+  const isV2 = (rulesetVersion ?? 'v1') === 'v2';
+  const RulesContentForVersion = resolveRulesContent(rulesetVersion);
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
   // Whoever needs to act next: the active bidder during a live auction, or
@@ -60,15 +69,21 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   // the one phase this preview applies to.
   const hoveredSlotIndex =
     isMyTurn && hoveredBidAmount !== null ? (slotIndexForBid(gameState.priceSlots, hoveredBidAmount) ?? undefined) : undefined;
+  const hoverRewardHint = isV2
+    ? `Reward if you bid here: draw ${cardsForRewardTier(hoveredSlotIndex ?? null)} cards, plus optionally extra shift and/or prize`
+    : undefined;
 
   const showingPlacement = !!mySeat && isWinner && gameState.phase === 'awaiting-new-prize-placement' && !!gameState.revealedPrize;
   const lastSlotIndex = gameState.priceSlots.length - 1;
   const upperSlotIndices = new Set([lastSlotIndex - 1, lastSlotIndex]);
-  const placeableSlots = showingPlacement
-    ? new Set(
-        gameState.priceSlots.map((_, i) => i).filter((i) => !upperSlotIndices.has(i) || gameState.unlockedUpperSlots.includes(i)),
-      )
-    : undefined;
+  // v2 has no placement choice (always the lowest slot) — no board
+  // affordance to click, just NewPrizeSlotPickerV2's own Confirm button.
+  const placeableSlots =
+    showingPlacement && !isV2
+      ? new Set(
+          gameState.priceSlots.map((_, i) => i).filter((i) => !upperSlotIndices.has(i) || gameState.unlockedUpperSlots.includes(i)),
+        )
+      : undefined;
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px', display: 'flex', gap: 28, flexWrap: 'wrap' }}>
@@ -83,9 +98,10 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           slots={gameState.priceSlots}
           eligibleSlotIndex={eligibleSlotIndex ?? undefined}
           hoveredSlotIndex={hoveredSlotIndex}
+          hoverRewardHint={hoverRewardHint}
           onPrizeClick={showingPrizeChoice ? (prizeId) => connection.takePrize(prizeId) : undefined}
           placeableSlots={placeableSlots}
-          onPlaceInSlot={showingPlacement ? (slotIndex) => connection.placeNewPrize(slotIndex) : undefined}
+          onPlaceInSlot={showingPlacement && !isV2 ? (slotIndex) => connection.placeNewPrize(slotIndex) : undefined}
         />
         <div style={{ marginTop: 16 }}>
           <AuctionStatusPanel auction={gameState.auction} displayLabel={displayLabel} />
@@ -120,21 +136,35 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           </div>
         )}
 
-        {showingPrizeChoice && (
-          <div style={{ marginTop: 16 }}>
-            <PrizeChoicePanel
-              bidAmount={highestBidAmount!}
-              hasEligiblePrize={eligibleSlotIndex !== null}
-              onChooseReward={(reward) => connection.chooseAuctionReward(reward)}
-            />
-          </div>
-        )}
+        {showingPrizeChoice &&
+          (isV2 ? (
+            <div style={{ marginTop: 16 }}>
+              <PrizeChoicePanelV2
+                bidAmount={highestBidAmount!}
+                hasEligiblePrize={eligibleSlotIndex !== null}
+                onChooseReward={(reward) => connection.chooseAuctionReward(reward)}
+              />
+            </div>
+          ) : (
+            <div style={{ marginTop: 16 }}>
+              <PrizeChoicePanel
+                bidAmount={highestBidAmount!}
+                hasEligiblePrize={eligibleSlotIndex !== null}
+                onChooseReward={(reward) => connection.chooseAuctionReward(reward)}
+              />
+            </div>
+          ))}
 
-        {showingPlacement && (
-          <div style={{ marginTop: 16 }}>
-            <NewPrizeSlotPicker revealedPrize={gameState.revealedPrize!} />
-          </div>
-        )}
+        {showingPlacement &&
+          (isV2 ? (
+            <div style={{ marginTop: 16 }}>
+              <NewPrizeSlotPickerV2 revealedPrize={gameState.revealedPrize!} onConfirm={() => connection.placeNewPrize(0)} />
+            </div>
+          ) : (
+            <div style={{ marginTop: 16 }}>
+              <NewPrizeSlotPicker revealedPrize={gameState.revealedPrize!} />
+            </div>
+          ))}
 
         <div style={{ marginTop: 16 }}>
           <ScoreBoard state={gameState} displayLabel={displayLabel} />
@@ -172,9 +202,17 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
 
       {showRules && (
         <RulesModal onClose={() => setShowRules(false)}>
-          <RulesContent />
+          {connection.roomInfo?.rulesetNotice?.isCurrentVersion === false && (
+            <p style={{ background: 'var(--border)', padding: 8, borderRadius: 4, fontSize: 13 }}>
+              A newer version of this game's rules has been released. This session will complete under the old
+              rules. Feedback is still valuable!
+            </p>
+          )}
+          <RulesContentForVersion />
         </RulesModal>
       )}
+
+      <WhatsNewNotice roomCode={roomCode} whatsNew={connection.roomInfo?.rulesetNotice?.whatsNew} />
     </main>
   );
 }

@@ -17,3 +17,10 @@ const AUCTION_REWARDS = new Set(['draw_cards', 'extra_shift', 'add_prizes']);
 export function isAuctionReward(value: unknown): value is 'draw_cards' | 'extra_shift' | 'add_prizes' {
   return typeof value === 'string' && AUCTION_REWARDS.has(value);
 }
+
+/** v2's reward choice shape — see MintConditionRuleset.chooseAuctionReward and docs/guides/game-rule-versions.md. */
+export function isAuctionRewardChoiceV2(value: unknown): value is { extraShift: boolean; addPrize: boolean } {
+  if (typeof value !== 'object' || value === null) return false;
+  const { extraShift, addPrize } = value as Record<string, unknown>;
+  return typeof extraShift === 'boolean' && typeof addPrize === 'boolean';
+}

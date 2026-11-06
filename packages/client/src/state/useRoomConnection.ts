@@ -41,6 +41,9 @@ export interface RoomInfo {
   seats: Record<string, { claimed: boolean; connected: boolean; name?: string } | undefined>;
   spectatorCount: number;
   chatMessages: ChatMessage[];
+  /** Opaque passthrough — present only for a game that has introduced ruleset versioning. See @denimcat/shared's RoomInfo and docs/guides/game-rule-versions.md. */
+  rulesetVersion?: string;
+  rulesetNotice?: { designerNote: string; whatsNew?: string; isCurrentVersion: boolean };
 }
 
 export interface RoomConnection<TView> {

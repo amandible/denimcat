@@ -1,21 +1,31 @@
 import type { Socket } from 'socket.io';
 import {
-  chooseAuctionReward,
   pass,
   placeBid,
-  placeNewPrize,
+  resolveRuleset,
   takePrize,
   type GameState,
   type MintConditionConfig,
   type SeatId,
 } from '@denimcat/engine-mint-condition';
 import { isNonEmptyString, type RoomStore } from '@denimcat/platform';
-import { isAuctionReward, isCardArray, isSlotIndex } from './validate';
+import { isAuctionReward, isAuctionRewardChoiceV2, isCardArray, isSlotIndex } from './validate';
 
 type MintConditionStore = RoomStore<GameState, MintConditionConfig, SeatId>;
 
 const INVALID_PAYLOAD = { code: 'INVALID_PAYLOAD', message: 'Malformed request.' };
 const INTERNAL_ERROR = { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred.' };
+
+/**
+ * Resolves the room's own pinned ruleset — see docs/guides/game-rule-versions.md.
+ * `roomCode`'s validity was already checked by the caller before `store.applyAction`
+ * ever runs, so a missing room here just falls back to resolveRuleset's own
+ * undefined-means-v1 default rather than erroring a second time.
+ */
+async function rulesetForRoom(store: MintConditionStore, roomCode: string) {
+  const room = await store.getRoom(roomCode);
+  return resolveRuleset(room?.rulesetVersion);
+}
 
 export function registerMintConditionHandlers(socket: Socket, store: MintConditionStore): void {
   socket.on('place_bid', (payload: { roomCode?: unknown; cards?: unknown }, cb: (res: unknown) => void) => {
@@ -54,8 +64,8 @@ export function registerMintConditionHandlers(socket: Socket, store: MintConditi
       return;
     }
     const { roomCode, prizeId } = payload;
-    store
-      .applyAction(roomCode, socket.id, (state, seat) => takePrize(state, seat, prizeId))
+    rulesetForRoom(store, roomCode)
+      .then((rules) => store.applyAction(roomCode, socket.id, (state, seat) => takePrize(state, seat, prizeId, rules)))
       .then(cb)
       .catch((error) => {
         console.error('[socket:mint-condition] take_prize failed:', error);
@@ -66,13 +76,17 @@ export function registerMintConditionHandlers(socket: Socket, store: MintConditi
   socket.on(
     'choose_auction_reward',
     (payload: { roomCode?: unknown; reward?: unknown }, cb: (res: unknown) => void) => {
-      if (!payload || !isNonEmptyString(payload.roomCode) || !isAuctionReward(payload.reward)) {
+      if (
+        !payload ||
+        !isNonEmptyString(payload.roomCode) ||
+        !(isAuctionReward(payload.reward) || isAuctionRewardChoiceV2(payload.reward))
+      ) {
         cb({ ok: false, error: INVALID_PAYLOAD });
         return;
       }
       const { roomCode, reward } = payload;
-      store
-        .applyAction(roomCode, socket.id, (state, seat) => chooseAuctionReward(state, seat, reward))
+      rulesetForRoom(store, roomCode)
+        .then((rules) => store.applyAction(roomCode, socket.id, (state, seat) => rules.chooseAuctionReward(state, seat, reward, rules)))
         .then(cb)
         .catch((error) => {
           console.error('[socket:mint-condition] choose_auction_reward failed:', error);
@@ -89,8 +103,8 @@ export function registerMintConditionHandlers(socket: Socket, store: MintConditi
         return;
       }
       const { roomCode, slotIndex } = payload;
-      store
-        .applyAction(roomCode, socket.id, (state, seat) => placeNewPrize(state, seat, slotIndex))
+      rulesetForRoom(store, roomCode)
+        .then((rules) => store.applyAction(roomCode, socket.id, (state, seat) => rules.placeNewPrize(state, seat, slotIndex, rules)))
         .then(cb)
         .catch((error) => {
           console.error('[socket:mint-condition] place_new_prize failed:', error);

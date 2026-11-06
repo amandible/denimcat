@@ -38,6 +38,15 @@ export interface RoomInfo<TSeat extends string> {
   seats: Partial<Record<TSeat, { claimed: boolean; connected: boolean; name?: string }>>;
   spectatorCount: number;
   chatMessages: ChatMessage[];
+  /**
+   * Opaque passthrough of PersistedRoom.rulesetVersion — present only for
+   * a game that has introduced ruleset versioning (see GameModule.currentRulesetVersionId).
+   * The platform never interprets this; the client's own game package
+   * uses it (e.g. to pick which version's rules text to render).
+   */
+  rulesetVersion?: string;
+  /** Present only for a game that has introduced ruleset versioning — see GameModule.describeRulesetVersion. */
+  rulesetNotice?: { designerNote: string; whatsNew?: string; isCurrentVersion: boolean };
 }
 
 export type JoinResult<TSeat extends string, TView> =
