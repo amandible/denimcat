@@ -9,11 +9,23 @@
  */
 export interface EmailSender {
   send(to: string, subject: string, text: string): Promise<void>;
+  /**
+   * True only for createNoopEmailSender below — lets a caller that's
+   * about to send something a human actually needs to act on (the
+   * sign-in magic link, specifically — see AuthService.requestLink)
+   * offer a same-session fallback instead of just logging it, since
+   * nothing will otherwise deliver it anywhere the person can see.
+   * Never true for createResendEmailSender, so this can never fire once
+   * real email is actually configured (local dev, tests, and CI are the
+   * only places RESEND_API_KEY is ever unset).
+   */
+  readonly isNoop?: boolean;
 }
 
 /** Used whenever RESEND_API_KEY isn't set (local dev, tests, CI) — logs instead of sending, so nothing crashes or silently no-ops without a trace. */
 export function createNoopEmailSender(): EmailSender {
   return {
+    isNoop: true,
     async send(to, subject, text) {
       console.log(`[email:noop] would send "${subject}" to ${to} (set RESEND_API_KEY to actually send):\n${text}`);
     },

@@ -261,3 +261,48 @@ describe('Socket.IO rejection via the parent-namespace auth middleware', () => {
     expect(welcome).toBeUndefined();
   });
 });
+
+describe('auth HTTP routes — dev sign-in link shortcut', () => {
+  let httpServer: ReturnType<typeof createServer>;
+  let baseUrl: string;
+
+  function requestLink(email: unknown) {
+    return fetch(`${baseUrl}/auth/request-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }).then((r) => r.json());
+  }
+
+  async function start(sender: EmailSender) {
+    const authService = createAuthService(new InMemoryAuthRepository(), sender, 'https://denimcat.example', undefined);
+    const app = createApp({ authService, clientOrigins: [] });
+    httpServer = createServer(app);
+    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    const port = (httpServer.address() as AddressInfo).port;
+    baseUrl = `http://localhost:${port}`;
+  }
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  it('includes devLink in the response when the configured EmailSender is the noop one', async () => {
+    await start({ isNoop: true, send: async () => {} });
+    const result = await requestLink('alice@example.com');
+    expect(result.ok).toBe(true);
+    expect(result.devLink).toMatch(/^https:\/\/denimcat\.example\/auth\/verify\?token=/);
+  });
+
+  it('omits devLink entirely when a real EmailSender is configured', async () => {
+    await start({ send: async () => {} });
+    const result = await requestLink('alice@example.com');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('omits devLink for a malformed address even with the noop sender', async () => {
+    await start({ isNoop: true, send: async () => {} });
+    const result = await requestLink('not-an-email');
+    expect(result).toEqual({ ok: true });
+  });
+});

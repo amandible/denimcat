@@ -22,10 +22,8 @@ export function authRouter(authService: AuthService, clientOrigins: string[]): R
 
   router.post('/request-link', async (req, res) => {
     const email = req.body?.email;
-    if (isNonEmptyString(email)) {
-      await authService.requestLink(email);
-    }
-    res.json({ ok: true });
+    const result = isNonEmptyString(email) ? await authService.requestLink(email) : {};
+    res.json({ ok: true, devLink: result.devLink });
   });
 
   router.post('/verify', async (req, res) => {

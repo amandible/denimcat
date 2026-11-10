@@ -16,8 +16,17 @@ function isOwnerEmail(email: string, ownerEmail: string | undefined): boolean {
 }
 
 export interface AuthService {
-  /** Always resolves, regardless of whether a link was actually sent (malformed address, rate-limited) — nothing for a caller to branch on, so there's nothing to leak. */
-  requestLink(email: string): Promise<void>;
+  /**
+   * Always resolves, regardless of whether a link was actually sent
+   * (malformed address, rate-limited) — in production (a real
+   * EmailSender configured) there's nothing in the return value to
+   * branch on, so there's nothing to leak. `devLink` is the one
+   * exception, and only ever populated when `emailSender.isNoop` is
+   * true — i.e. only in local dev, tests, or CI, where no email is
+   * actually being delivered anywhere, so returning the link directly
+   * leaks nothing a person testing locally doesn't already have.
+   */
+  requestLink(email: string): Promise<{ devLink?: string }>;
   verifyToken(
     token: string,
   ): Promise<
@@ -53,12 +62,12 @@ export function createAuthService(
   ownerEmail: string | undefined,
 ): AuthService {
   return {
-    async requestLink(email: string): Promise<void> {
+    async requestLink(email: string): Promise<{ devLink?: string }> {
       const normalized = email.trim().toLowerCase();
-      if (!LOOKS_LIKE_EMAIL.test(normalized)) return;
+      if (!LOOKS_LIKE_EMAIL.test(normalized)) return {};
 
       const recentCount = await repo.countRecentMagicLinks(normalized, 60 * 60 * 1000);
-      if (recentCount >= MAX_LINKS_PER_HOUR) return;
+      if (recentCount >= MAX_LINKS_PER_HOUR) return {};
 
       const { isNew } = await repo.getOrCreateAccount(normalized);
       if (isNew && ownerEmail) {
@@ -76,6 +85,8 @@ export function createAuthService(
         ? `Click to sign in to denimcat (expires in 20 minutes):\n\n${link}`
         : 'Your denimcat sign-in link is ready, but no APP_BASE_URL is configured to build a clickable one.';
       emailSender.send(normalized, 'Your denimcat sign-in link', text).catch((error) => console.error('[auth] sign-in link email failed:', error));
+
+      return { devLink: emailSender.isNoop && link ? link : undefined };
     },
 
     async verifyToken(token: string) {
