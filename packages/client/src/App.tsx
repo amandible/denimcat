@@ -17,8 +17,8 @@ import { DetourRoom } from './games/detour/DetourRoom';
 import { TashKalarRoom } from '../../../private-games/other-games/client-tashkalar/TashKalarRoom';
 import { KingsGateRoom } from '../../../private-games/other-games/client-kingsgate/KingsGateRoom';
 import { loadSessionToken, onSessionInvalidated, saveIdentity } from './state/authToken';
-import { SERVER_URL } from './socket';
 import { Footer } from './components/Footer';
+import { checkSessionWithRetry, fetchSessionOnce } from './state/sessionCheck';
 import { parseRoute, type Route, type Slug } from './routes';
 
 const HOME_VIEWS: Record<Slug, () => JSX.Element> = {
@@ -39,11 +39,13 @@ const ROOM_VIEWS: Record<Slug, (props: { roomCode: string }) => JSX.Element> = {
   kingsgate: KingsGateRoom,
 };
 
-type SessionState = 'checking' | 'signed-out' | 'signed-in';
+type SessionState = 'checking' | 'waking' | 'unreachable' | 'signed-out' | 'signed-in';
 
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname, window.location.search));
   const [session, setSession] = useState<SessionState>('checking');
+  // Bumped by the "Try again" button to re-run the session check.
+  const [sessionCheckRun, setSessionCheckRun] = useState(0);
 
   useEffect(() => {
     function onPopState() {
@@ -53,34 +55,32 @@ export function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  // One-time check on load: is the stored session token (if any) still
-  // valid? Handles revocation/expiry gracefully rather than trusting
-  // localStorage's mere presence. Timed out via AbortController rather than
-  // left to hang indefinitely — a slow/unresponsive server (e.g. mid-restart
-  // during a deploy) would otherwise leave `session` stuck on 'checking'
-  // forever, which renders as a blank page with no way out short of another
-  // reload.
+  // Check on load: is the stored session token (if any) still valid?
+  // Handles revocation/expiry rather than trusting localStorage's mere
+  // presence. A server that can't be reached (a Fly machine cold-starting,
+  // a deploy mid-restart) is retried with a "waking up" notice instead of
+  // being mistaken for "signed out" — see checkSessionWithRetry.
   useEffect(() => {
     const token = loadSessionToken();
     if (!token) {
       setSession('signed-out');
       return;
     }
+    setSession('checking');
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    fetch(`${SERVER_URL}/auth/session`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
-      .then((res) => res.json())
-      .then((result: { ok: true; email: string; displayName: string | null; turnChimeEnabled: boolean; isOwner: boolean } | { ok: false }) => {
-        if (result.ok) saveIdentity(result.email, result.displayName, result.turnChimeEnabled, result.isOwner);
-        setSession(result.ok ? 'signed-in' : 'signed-out');
-      })
-      .catch(() => setSession('signed-out'))
-      .finally(() => clearTimeout(timeout));
-    return () => {
-      clearTimeout(timeout);
-      controller.abort();
-    };
-  }, []);
+    checkSessionWithRetry(fetchSessionOnce(token, controller.signal), {
+      onWaiting: () => setSession('waking'),
+      isCancelled: () => controller.signal.aborted,
+    }).then((result) => {
+      if (controller.signal.aborted) return;
+      if (result.kind === 'signed-in') {
+        const { email, displayName, turnChimeEnabled, isOwner } = result.identity;
+        saveIdentity(email, displayName, turnChimeEnabled, isOwner);
+      }
+      setSession(result.kind);
+    });
+    return () => controller.abort();
+  }, [sessionCheckRun]);
 
   // A game socket's auth middleware rejected our session (expired/revoked
   // elsewhere) — drop back to the sign-in gate immediately rather than
@@ -98,10 +98,19 @@ export function App() {
   // session-gate early-returns below.
   function renderRoute() {
     if (route.kind === 'auth-verify') return <VerifyView token={route.token} onVerified={handleVerified} />;
-    if (session === 'checking') {
+    if (session === 'checking' || session === 'waking' || session === 'unreachable') {
       return (
-        <main style={{ maxWidth: 420, margin: '0 auto', minHeight: '100vh', display: 'flex', alignItems: 'center', padding: '0 16px' }}>
-          <p style={{ color: 'var(--muted)' }}>Loading…</p>
+        <main style={{ maxWidth: 420, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 16px' }}>
+          {session === 'checking' && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+          {session === 'waking' && <p style={{ color: 'var(--muted)' }}>Waking up the server — this can take a few seconds…</p>}
+          {session === 'unreachable' && (
+            <>
+              <p>Can't reach the server right now.</p>
+              <button type="button" className="btn btn-primary" onClick={() => setSessionCheckRun((n) => n + 1)}>
+                Try again
+              </button>
+            </>
+          )}
         </main>
       );
     }
