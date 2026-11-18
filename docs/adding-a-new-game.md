@@ -175,13 +175,17 @@ example):
 - Client: **no test runner exists in this codebase.** Verify with
   `npx tsc -p tsconfig.json --noEmit` and `npx vite build` in
   `packages/client`, then an actual manual pass in a browser (local dev
-  server, `DATABASE_URL=""` to force safe in-memory storage — see any
-  recent session's dev-server setup for the exact incantation) before
+  server, `DATABASE_URL=""` to force safe in-memory storage — see
+  `docs/running-locally.md` for the exact commands) before
   calling client work done. Say explicitly which surfaces were
   live-verified vs. only typechecked/built if you didn't get to all of
   them.
 
 ## Shipping
+
+Full details, including every environment variable, are in
+`docs/environment-and-deploy.md`. The short version:
+
 
 - Platform/server changes (new engine, new routes, new `GameModule`) need
   `fly deploy -a denimcat-server`; client-only changes auto-deploy via
