@@ -3,6 +3,7 @@ import type { AuthService, SurveyRepository } from '@denimcat/platform';
 import { authRouter } from './authRoutes';
 import { myGamesRouter, type GameStoreEntry } from './myGamesRoutes';
 import { surveyRouter } from './surveyRoutes';
+import { jsonErrorHandler } from './asyncRoute';
 
 export function createApp(deps: {
   authService: AuthService;
@@ -20,5 +21,6 @@ export function createApp(deps: {
   app.get('/health', (_req, res) => {
     res.json({ ok: true });
   });
+  app.use(jsonErrorHandler);
   return app;
 }

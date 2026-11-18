@@ -3,6 +3,7 @@ import cors from 'cors';
 import { isNonEmptyString, type AuthService, type SurveyRepository } from '@denimcat/platform';
 import { STANDARD_SURVEY_QUESTIONS } from '@denimcat/shared';
 import type { GameStoreEntry } from './myGamesRoutes';
+import { asyncRoute } from './asyncRoute';
 
 const MAX_ANSWER_LENGTH = 2000;
 /** Matches MAX_NAME_LENGTH in roomHandlers.ts — a position label is display text in the same class as a player name. */
@@ -39,7 +40,7 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
   const router = Router();
   router.use(cors({ origin: clientOrigins.length > 0 ? clientOrigins : '*' }));
 
-  router.post('/', async (req, res) => {
+  router.post('/', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     const gameId = req.body?.gameId;
     const roomCode = req.body?.roomCode;
@@ -107,13 +108,13 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
     // answer that was actually discarded.
     const alreadyAnswered = results.filter((r) => !r.stored).map((r) => r.questionId);
     res.json({ ok: true, alreadyAnswered });
-  });
+  }));
 
   // Lets the recap panel skip straight to "already submitted" on a reload
   // instead of re-showing a blank form — the account's own seat only, never
   // another player's answers. Open to any signed-in account (not owner-only
   // like the routes below), matching POST's own auth model.
-  router.get('/:gameId/:roomCode/mine', async (req, res) => {
+  router.get('/:gameId/:roomCode/mine', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     if (!token) {
       res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
@@ -141,9 +142,9 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
     }
     const answeredQuestionIds = await surveyRepository.getAnsweredQuestionIds(room.roomId, seat);
     res.json({ ok: true, answeredQuestionIds });
-  });
+  }));
 
-  router.get('/:gameId', async (req, res) => {
+  router.get('/:gameId', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     if (!token) {
       res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
@@ -156,13 +157,13 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
     }
     const responses = await surveyRepository.listForGame(req.params.gameId);
     res.json({ ok: true, responses });
-  });
+  }));
 
   // The home screen's "new feedback" indicator (see NotesView and HomeView):
   // for every registered game, whether it has a response newer than this
   // owner last viewed its notes page. Mounted before /:gameId would ever
   // match "/" with no gameId, so no route-ordering conflict.
-  router.get('/', async (req, res) => {
+  router.get('/', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     if (!token) {
       res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
@@ -183,9 +184,9 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
       }),
     );
     res.json({ ok: true, games });
-  });
+  }));
 
-  router.post('/:gameId/read', async (req, res) => {
+  router.post('/:gameId/read', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     if (!token) {
       res.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Not signed in.' } });
@@ -198,7 +199,7 @@ export function surveyRouter(authService: AuthService, gameStores: GameStoreEntr
     }
     await surveyRepository.markRead(session.email, req.params.gameId, Date.now());
     res.json({ ok: true });
-  });
+  }));
 
   return router;
 }

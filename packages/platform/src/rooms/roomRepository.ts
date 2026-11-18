@@ -151,13 +151,19 @@ export function parsePersistedRoomData<TState, TSeat extends string>(
 }
 
 /**
- * Stores each room as a single JSONB blob keyed by room code — there's no
- * querying need beyond "get room by code," so a normalized relational
- * schema would add complexity with no payoff for an ephemeral, no-login
- * site. Every method fails soft (logs and degrades) rather than throwing: a
- * transient Neon outage should never crash the socket server or an
- * in-progress game — it should just mean that snapshot isn't durably saved
- * yet, which the next successful write will catch up on.
+ * Stores each room as a single JSONB blob keyed by room code — lookups are
+ * almost all "get room by code," so a normalized relational schema would
+ * add complexity with no payoff. Writes fail soft (log and degrade) rather
+ * than throwing: a transient Neon outage should never crash the socket
+ * server or an in-progress game — it should just mean that snapshot isn't
+ * durably saved yet, which the next successful write will catch up on.
+ *
+ * `get` is the exception: it logs and RETHROWS. Returning null on error
+ * made an outage indistinguishable from "no such room" — players were told
+ * their room didn't exist, and createRoom's code-collision check could
+ * pass and then overwrite a real room (save is an upsert). Every caller
+ * already handles a rejection: socket handlers answer INTERNAL_ERROR, HTTP
+ * routes go through asyncRoute, the idle sweep catches and logs.
  */
 export class PostgresRoomRepository<TState, TSeat extends string> implements RoomRepository<TState, TSeat> {
   async get(code: string): Promise<PersistedRoom<TState, TSeat> | null> {
@@ -170,8 +176,9 @@ export class PostgresRoomRepository<TState, TSeat extends string> implements Roo
       const raw = rows[0]?.data;
       return raw == null ? null : parsePersistedRoomData(raw);
     } catch (error) {
+      // Rethrown, unlike every other method here — see the class comment.
       console.error(`[db] failed to read room ${code}:`, error);
-      return null;
+      throw error;
     }
   }
 
@@ -210,12 +217,14 @@ export class PostgresRoomRepository<TState, TSeat extends string> implements Roo
     const db = getDb();
     if (!db) return [];
     try {
-      // `data` comes back from a real Neon connection as a jsonb SCALAR
+      // Rows written before 2026-11-04 stored `data` as a jsonb SCALAR
       // STRING holding the JSON text, not a jsonb object — see
-      // parsePersistedRoomData's doc comment for the same quirk on the
-      // read side. `->>`/`jsonb_each_text` only work on a true jsonb
-      // object, so unwrap that outer string layer first via a LATERAL
-      // before applying any path lookup.
+      // parsePersistedRoomData's doc comment (save() is fixed and
+      // scripts/migrate-room-data-encoding.js converted old rows, but this
+      // stays defensive for the same reason that function does).
+      // `->>`/`jsonb_each_text` only work on a true jsonb object, so
+      // unwrap any outer string layer first via a LATERAL before applying
+      // any path lookup.
       const rows = await db<{ data: PersistedRoom<TState, TSeat> | string }[]>`
         SELECT r.data FROM rooms r,
         LATERAL (

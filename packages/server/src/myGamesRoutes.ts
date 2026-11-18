@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import cors from 'cors';
 import { isNonEmptyString, type AuthService, type GameModule, type RoomStore } from '@denimcat/platform';
+import { asyncRoute } from './asyncRoute';
 
 export interface GameStoreEntry {
   module: GameModule<any, any, any>;
@@ -25,7 +26,7 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
   const router = Router();
   router.use(cors({ origin: clientOrigins.length > 0 ? clientOrigins : '*' }));
 
-  router.get('/', async (req, res) => {
+  router.get('/', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     if (!token) {
       res.json({ ok: false });
@@ -64,9 +65,9 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
       .sort((a, b) => (STATUS_PRIORITY[a.status] !== STATUS_PRIORITY[b.status] ? STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status] : b.createdAt - a.createdAt));
 
     res.json({ ok: true, games });
-  });
+  }));
 
-  router.post('/abandon', async (req, res) => {
+  router.post('/abandon', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     const gameId = req.body?.gameId;
     const code = req.body?.code;
@@ -86,7 +87,7 @@ export function myGamesRouter(authService: AuthService, gameStores: GameStoreEnt
     }
     const result = await entry.store.abandonRoom(code, session.email);
     res.json(result);
-  });
+  }));
 
   return router;
 }

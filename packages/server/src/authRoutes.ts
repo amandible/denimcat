@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import cors from 'cors';
 import { isNonEmptyString, type AuthService } from '@denimcat/platform';
+import { asyncRoute } from './asyncRoute';
 
 function bearerToken(req: { headers: { authorization?: string } }): string | null {
   const header = req.headers.authorization;
@@ -20,13 +21,13 @@ export function authRouter(authService: AuthService, clientOrigins: string[]): R
   const router = Router();
   router.use(cors({ origin: clientOrigins.length > 0 ? clientOrigins : '*' }));
 
-  router.post('/request-link', async (req, res) => {
+  router.post('/request-link', asyncRoute(async (req, res) => {
     const email = req.body?.email;
     const result = isNonEmptyString(email) ? await authService.requestLink(email) : {};
     res.json({ ok: true, devLink: result.devLink });
-  });
+  }));
 
-  router.post('/verify', async (req, res) => {
+  router.post('/verify', asyncRoute(async (req, res) => {
     const token = req.body?.token;
     if (!isNonEmptyString(token)) {
       res.json({ ok: false });
@@ -34,9 +35,9 @@ export function authRouter(authService: AuthService, clientOrigins: string[]): R
     }
     const result = await authService.verifyToken(token);
     res.json(result ? { ok: true, ...result } : { ok: false });
-  });
+  }));
 
-  router.get('/session', async (req, res) => {
+  router.get('/session', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     if (!token) {
       res.json({ ok: false });
@@ -44,15 +45,15 @@ export function authRouter(authService: AuthService, clientOrigins: string[]): R
     }
     const session = await authService.checkSession(token);
     res.json(session ? { ok: true, ...session } : { ok: false });
-  });
+  }));
 
-  router.post('/sign-out', async (req, res) => {
+  router.post('/sign-out', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     if (token) await authService.signOut(token);
     res.json({ ok: true });
-  });
+  }));
 
-  router.post('/profile', async (req, res) => {
+  router.post('/profile', asyncRoute(async (req, res) => {
     const token = bearerToken(req);
     const displayName = req.body?.displayName;
     const turnChimeEnabled = req.body?.turnChimeEnabled;
@@ -62,7 +63,7 @@ export function authRouter(authService: AuthService, clientOrigins: string[]): R
     }
     const result = await authService.updateProfile(token, { displayName, turnChimeEnabled });
     res.json(result ? { ok: true, ...result } : { ok: false });
-  });
+  }));
 
   return router;
 }
