@@ -15,9 +15,11 @@ export interface EmailSender {
    * sign-in magic link, specifically — see AuthService.requestLink)
    * offer a same-session fallback instead of just logging it, since
    * nothing will otherwise deliver it anywhere the person can see.
-   * Never true for createResendEmailSender, so this can never fire once
-   * real email is actually configured (local dev, tests, and CI are the
-   * only places RESEND_API_KEY is ever unset).
+   * Never true for createResendEmailSender. NOT sufficient on its own to
+   * expose sign-in links: a production server whose Resend secrets went
+   * missing also gets the noop sender, so AuthService additionally
+   * requires its explicit `exposeDevLinks` option (off in production —
+   * see shouldExposeDevLinks).
    */
   readonly isNoop?: boolean;
 }

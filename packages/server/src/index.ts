@@ -19,6 +19,7 @@ import {
   RoomStore,
   attachSocketHandlers,
   createAuthService,
+  shouldExposeDevLinks,
   createDefaultAuthRepository,
   createDefaultEmailSender,
   createDefaultRoomRepository,
@@ -54,7 +55,11 @@ async function main() {
   const appBaseUrl = process.env.APP_BASE_URL;
 
   const authRepository = createDefaultAuthRepository();
-  const authService = createAuthService(authRepository, emailSender, appBaseUrl, process.env.OWNER_EMAIL);
+  const exposeDevLinks = shouldExposeDevLinks(process.env);
+  if (emailSender.isNoop && process.env.NODE_ENV === 'production') {
+    console.warn('[startup] WARNING: no email sender configured in production (RESEND_API_KEY/RESEND_FROM missing) — sign-in links and turn notifications will NOT be delivered.');
+  }
+  const authService = createAuthService(authRepository, emailSender, appBaseUrl, process.env.OWNER_EMAIL, { exposeDevLinks });
 
   // Populated below, after each game's RoomStore is constructed (which
   // itself needs `io`, which needs `httpServer`, which needs `app` — so

@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Server } from 'socket.io';
 import { io as ioc, type Socket as ClientSocket } from 'socket.io-client';
-import { createAuthService, InMemoryAuthRepository, type AuthService, type EmailSender } from '@denimcat/platform';
+import { createAuthService, InMemoryAuthRepository, shouldExposeDevLinks, type AuthService, type EmailSender } from '@denimcat/platform';
 import { createApp } from '../src/app';
 
 function fakeEmailSender(): EmailSender & { calls: { to: string; subject: string; text: string }[] } {
@@ -274,8 +274,8 @@ describe('auth HTTP routes — dev sign-in link shortcut', () => {
     }).then((r) => r.json());
   }
 
-  async function start(sender: EmailSender) {
-    const authService = createAuthService(new InMemoryAuthRepository(), sender, 'https://denimcat.example', undefined);
+  async function start(sender: EmailSender, options: { exposeDevLinks?: boolean } = { exposeDevLinks: true }) {
+    const authService = createAuthService(new InMemoryAuthRepository(), sender, 'https://denimcat.example', undefined, options);
     const app = createApp({ authService, clientOrigins: [] });
     httpServer = createServer(app);
     await new Promise<void>((resolve) => httpServer.listen(0, resolve));
@@ -300,9 +300,27 @@ describe('auth HTTP routes — dev sign-in link shortcut', () => {
     expect(result).toEqual({ ok: true });
   });
 
+  it('omits devLink with the noop sender unless exposeDevLinks is explicitly on (fails closed if prod email config goes missing)', async () => {
+    await start({ isNoop: true, send: async () => {} }, {});
+    const result = await requestLink('alice@example.com');
+    expect(result).toEqual({ ok: true });
+  });
+
   it('omits devLink for a malformed address even with the noop sender', async () => {
     await start({ isNoop: true, send: async () => {} });
     const result = await requestLink('not-an-email');
     expect(result).toEqual({ ok: true });
+  });
+});
+
+describe('shouldExposeDevLinks', () => {
+  it('is false in production, whatever else is configured', () => {
+    expect(shouldExposeDevLinks({ NODE_ENV: 'production' })).toBe(false);
+  });
+
+  it('is true outside production (local dev, tests)', () => {
+    expect(shouldExposeDevLinks({})).toBe(true);
+    expect(shouldExposeDevLinks({ NODE_ENV: 'development' })).toBe(true);
+    expect(shouldExposeDevLinks({ NODE_ENV: 'test' })).toBe(true);
   });
 });

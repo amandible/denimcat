@@ -15,16 +15,30 @@ function isOwnerEmail(email: string, ownerEmail: string | undefined): boolean {
   return ownerEmail !== undefined && email.toLowerCase() === ownerEmail.toLowerCase();
 }
 
+/**
+ * Whether the server may return magic links directly in the
+ * /auth/request-link response (see AuthService.requestLink's `devLink`).
+ * Never in production — the Dockerfile sets NODE_ENV=production — so that
+ * convenience can't switch itself on there just because an email secret
+ * is missing. Takes `env` as a parameter for testability.
+ */
+export function shouldExposeDevLinks(env: Record<string, string | undefined>): boolean {
+  return env.NODE_ENV !== 'production';
+}
+
 export interface AuthService {
   /**
    * Always resolves, regardless of whether a link was actually sent
    * (malformed address, rate-limited) — in production (a real
    * EmailSender configured) there's nothing in the return value to
    * branch on, so there's nothing to leak. `devLink` is the one
-   * exception, and only ever populated when `emailSender.isNoop` is
-   * true — i.e. only in local dev, tests, or CI, where no email is
-   * actually being delivered anywhere, so returning the link directly
-   * leaks nothing a person testing locally doesn't already have.
+   * exception: populated only when BOTH `options.exposeDevLinks` is on
+   * AND `emailSender.isNoop` is true. Requiring both is deliberate —
+   * returning the link directly lets the caller sign in as whatever
+   * email they typed, so it must fail closed: a production server whose
+   * Resend secrets went missing (which silently falls back to the noop
+   * sender) must NOT start handing out sign-in links for any address.
+   * See shouldExposeDevLinks for how the server decides the flag.
    */
   requestLink(email: string): Promise<{ devLink?: string }>;
   verifyToken(
@@ -60,6 +74,7 @@ export function createAuthService(
   emailSender: EmailSender,
   appBaseUrl: string | undefined,
   ownerEmail: string | undefined,
+  options: { exposeDevLinks?: boolean } = {},
 ): AuthService {
   return {
     async requestLink(email: string): Promise<{ devLink?: string }> {
@@ -86,7 +101,7 @@ export function createAuthService(
         : 'Your denimcat sign-in link is ready, but no APP_BASE_URL is configured to build a clickable one.';
       emailSender.send(normalized, 'Your denimcat sign-in link', text).catch((error) => console.error('[auth] sign-in link email failed:', error));
 
-      return { devLink: emailSender.isNoop && link ? link : undefined };
+      return { devLink: options.exposeDevLinks && emailSender.isNoop && link ? link : undefined };
     },
 
     async verifyToken(token: string) {

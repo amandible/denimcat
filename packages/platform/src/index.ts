@@ -18,7 +18,7 @@ export {
   PostgresAuthRepository,
   createDefaultAuthRepository,
 } from './auth/authRepository';
-export { type AuthService, createAuthService } from './auth/authService';
+export { type AuthService, createAuthService, shouldExposeDevLinks } from './auth/authService';
 export {
   type SurveyResponse,
   type SurveyRepository,
