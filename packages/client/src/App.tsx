@@ -19,38 +19,7 @@ import { KingsGateRoom } from '../../../private-games/other-games/client-kingsga
 import { loadSessionToken, onSessionInvalidated, saveIdentity } from './state/authToken';
 import { SERVER_URL } from './socket';
 import { Footer } from './components/Footer';
-
-type Slug = 'hyperbloom' | 'mint-condition' | 'love-triangles' | 'detour' | 'tashkalar' | 'kingsgate';
-
-type Route =
-  | { kind: 'home' }
-  | { kind: 'game-home'; slug: Slug }
-  | { kind: 'room'; slug: Slug; roomCode: string }
-  | { kind: 'game-notes'; slug: Slug }
-  | { kind: 'auth-verify'; token: string }
-  | { kind: 'settings' };
-
-function parseRoute(): Route {
-  const path = window.location.pathname;
-  const roomMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|detour|tashkalar|kingsgate)\/room\/([A-Za-z0-9]{4})$/);
-  if (roomMatch) {
-    return { kind: 'room', slug: roomMatch[1] as Slug, roomCode: roomMatch[2].toUpperCase() };
-  }
-  const notesMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|detour|tashkalar|kingsgate)\/notes$/);
-  if (notesMatch) {
-    return { kind: 'game-notes', slug: notesMatch[1] as Slug };
-  }
-  const gameMatch = path.match(/^\/(hyperbloom|mint-condition|love-triangles|detour|tashkalar|kingsgate)\/?$/);
-  if (gameMatch) {
-    return { kind: 'game-home', slug: gameMatch[1] as Slug };
-  }
-  if (path === '/auth/verify') {
-    const token = new URLSearchParams(window.location.search).get('token');
-    if (token) return { kind: 'auth-verify', token };
-  }
-  if (path === '/settings') return { kind: 'settings' };
-  return { kind: 'home' };
-}
+import { parseRoute, type Route, type Slug } from './routes';
 
 const HOME_VIEWS: Record<Slug, () => JSX.Element> = {
   hyperbloom: HyperBloomHomeView,
@@ -73,12 +42,12 @@ const ROOM_VIEWS: Record<Slug, (props: { roomCode: string }) => JSX.Element> = {
 type SessionState = 'checking' | 'signed-out' | 'signed-in';
 
 export function App() {
-  const [route, setRoute] = useState<Route>(parseRoute());
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname, window.location.search));
   const [session, setSession] = useState<SessionState>('checking');
 
   useEffect(() => {
     function onPopState() {
-      setRoute(parseRoute());
+      setRoute(parseRoute(window.location.pathname, window.location.search));
     }
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);

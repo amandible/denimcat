@@ -39,7 +39,7 @@ and `engine-*`):
 
 ```sh
 fly deploy -a denimcat-server          # from the repo root
-curl -s https://denimcat-server.fly.dev/health   # expect {"ok":true}
+node scripts/smoke-test-server.js https://denimcat-server.fly.dev   # health + every game registered
 ```
 
 `fly deploy` builds from your local working tree, including the

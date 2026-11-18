@@ -103,9 +103,9 @@ example):
   `.then(cb).catch(error => { console.error(...); cb({ok:false, error: INTERNAL_ERROR}) })`.
 - `validate.ts` — small type-guard functions for this game's payload
   shapes (`isCardArray`, `isSlotIndex`, etc.).
-- Register in `packages/server/src/index.ts`: import the state/config/seat
-  types and the module, then
-  `const xRepository = createDefaultRoomRepository<State, Seat>(); const xNsp = io.of(xModule.namespace); const xStore = new RoomStore(xModule, xRepository, xNsp, roomStoreOptions); attachSocketHandlers(xNsp, xStore, xModule); gameStores.push({ module: xModule, store: xStore });`
+- Register in `packages/server/src/index.ts`: import the module, then add
+  one line, `registerGame(xModule);`, next to the others. Also add the
+  game id to `EXPECTED_GAMES` in `scripts/smoke-test-server.js`.
 - `packages/server/package.json` needs `@denimcat/engine-<game>: "*"`
   added to dependencies, then `npm install` at the repo root so the
   workspace symlink exists.
@@ -153,11 +153,11 @@ example):
   panels the game needs.
 - `styles/<game>.css` if the board needs bespoke layout, imported from
   `<Game>Room.tsx`.
-- Register in `packages/client/src/App.tsx` (five separate edits, easy to
-  miss one): add the slug to the `Slug` union type; add it to all three
-  route regexes (`roomMatch`, `notesMatch`, `gameMatch`); add the
-  `HomeView` to `HOME_VIEWS`; add the `Room` component to whatever map
-  renders rooms.
+- Register for routing: add the slug to `GAME_SLUGS` in
+  `packages/client/src/routes.ts` (the route patterns are built from it),
+  then add the `HomeView` to `HOME_VIEWS` and the `Room` component to
+  `ROOM_VIEWS` in `packages/client/src/App.tsx`. Both maps are typed
+  `Record<Slug, …>`, so `tsc` reports a missing entry.
 - Register in `packages/client/src/games/registry.ts`: `{ slug, displayName, namespace, tagline }` — this is what makes the game appear on the landing page's game-select list. Omit entirely (comment explaining why, see King's Gate) for a built-but-not-yet-promoted game.
 - `packages/client/package.json` needs `@denimcat/engine-<game>: "*"`
   added, then `npm install`.
@@ -172,7 +172,8 @@ example):
   end-to-end (`create_room` → `join_room` → actions → assertions on the
   acked response and/or `store`'s state). This is the layer that catches
   wiring mistakes the engine's own unit tests can't see.
-- Client: **no test runner exists in this codebase.** Verify with
+- Client: vitest covers only pure logic so far (`packages/client/test/`,
+  e.g. route parsing) — there are no component tests. Verify with
   `npx tsc -p tsconfig.json --noEmit` and `npx vite build` in
   `packages/client`, then an actual manual pass in a browser (local dev
   server, `DATABASE_URL=""` to force safe in-memory storage — see
@@ -186,11 +187,12 @@ example):
 Full details, including every environment variable, are in
 `docs/environment-and-deploy.md`. The short version:
 
-
 - Platform/server changes (new engine, new routes, new `GameModule`) need
   `fly deploy -a denimcat-server`; client-only changes auto-deploy via
-  Vercel on push. Verify with `curl -s https://denimcat-server.fly.dev/health`
-  and/or a real browser navigation to the production URL afterward.
+  Vercel on push. Verify with
+  `node scripts/smoke-test-server.js https://denimcat-server.fly.dev`
+  (checks every game is registered) and/or a real browser navigation to
+  the production URL afterward.
 - A private-submodule game's commits go in two steps: commit + push
   inside `private-games/other-games` first, then commit the outer repo's
   updated submodule pointer (and anything in `packages/` that changed

@@ -65,6 +65,10 @@ Note that each package's `tsconfig.json` covers `src/` only, and vitest
 strips types without checking them — so type errors in test files go
 unnoticed unless they cause a runtime failure.
 
-The client has no test runner; verify client work with
-`npx tsc -p tsconfig.json --noEmit` and `npx vite build` in
+The client's vitest tests (`packages/client/test/`) cover only pure
+logic such as route parsing; there are no component tests. Verify client
+work with `npx tsc -p tsconfig.json --noEmit` and `npx vite build` in
 `packages/client`, then a real pass in a browser.
+
+To check a running server has every game registered:
+`node scripts/smoke-test-server.js` (defaults to `http://localhost:4000`).
