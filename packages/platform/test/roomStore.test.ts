@@ -1220,3 +1220,57 @@ describe('RoomStore — persistence write ordering', () => {
     store.stop();
   });
 });
+
+describe('RoomStore — seat takeover releases the old socket', () => {
+  it('after another tab reclaims the seat, the old socket can no longer act or free the seat', async () => {
+    const repo = await seedRepo('TKOV');
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+
+    expect((await store.reconnectRoom('TKOV', 'p1', 'tok-1', 'old-tab')).ok).toBe(true);
+    expect((await store.reconnectRoom('TKOV', 'p1', 'tok-1', 'new-tab')).ok).toBe(true);
+
+    const stale = await store.applyAction('TKOV', 'old-tab', (state) => ok({ value: state.value + 1 }));
+    expect(stale.ok).toBe(false);
+
+    await store.leaveSeat('TKOV', 'old-tab');
+    const room = await store.getRoom('TKOV');
+    expect(room?.seats.p1?.socketId).toBe('new-tab');
+    expect((await store.applyAction('TKOV', 'new-tab', (state) => ok({ value: state.value + 1 }))).ok).toBe(true);
+
+    store.stop();
+  });
+
+  it('the same holds when the seat is reclaimed by account', async () => {
+    const repo = await seedRepo('TKOA');
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+
+    expect((await store.reconnectRoom('TKOA', 'p1', 'tok-1', 'old-tab', 'p1@example.com')).ok).toBe(true);
+    expect((await store.reconnectByAccount('TKOA', 'p1@example.com', 'new-tab')).ok).toBe(true);
+
+    expect((await store.applyAction('TKOA', 'old-tab', (state) => ok({ value: state.value + 1 }))).ok).toBe(false);
+
+    store.stop();
+  });
+});
+
+describe('RoomStore — turn-notification link', () => {
+  it('links to the room without embedding the seat token (a forwarded email must not hand over the seat)', async () => {
+    const repo = await seedTurnRepo('LINK', {
+      p1: { seatToken: 'tok-1', email: 'p1@example.com' },
+      p2: { seatToken: 'secret-tok-2', email: 'p2@example.com' },
+    });
+    const sender = fakeEmailSender();
+    const module = { ...makeTurnModule(), roomUrlPath: (code: string) => `/turn-game/room/${code}` };
+    const store = new RoomStore(module, repo, fakeNamespace(), { emailSender: sender, appBaseUrl: 'https://denimcat.example' });
+
+    await store.reconnectRoom('LINK', 'p1', 'tok-1', 'socket-1');
+    await store.applyAction('LINK', 'socket-1', () => ok<TurnState>({ turn: 'p2' }));
+
+    expect(sender.calls).toHaveLength(1);
+    expect(sender.calls[0].text).toContain('https://denimcat.example/turn-game/room/LINK');
+    expect(sender.calls[0].text).not.toContain('secret-tok-2');
+    expect(sender.calls[0].text).not.toContain('token=');
+
+    store.stop();
+  });
+});

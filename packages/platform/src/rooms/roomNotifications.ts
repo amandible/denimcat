@@ -36,18 +36,14 @@ export function notifyTurn<TState, TConfig, TSeat extends string>(
   const email = room.knownEmails[after];
   if (!email) return;
 
-  // A live seat entry (and its token) may already be gone by now — its
-  // own 2-minute reconnect grace lapsed before this later turn even came
-  // back around, which is the normal case in real async play. The link
-  // still works either way: with a token it reconnects straight back in,
-  // without one the client just falls back to its own seat-picker lobby,
-  // same as any other stale-token reconnect attempt (see useRoomConnection.ts).
-  const seatToken = room.seats[after]?.seatToken;
+  // A plain room link — deliberately WITHOUT the seat token. A token
+  // reconnects whoever presents it, regardless of account, so embedding it
+  // made a forwarded email hand over the seat. The site requires sign-in
+  // anyway, and the client reclaims the seat by account identity
+  // (reconnect_by_account) when it has no local token — see
+  // useRoomConnection.ts.
   const path = ctx.module.roomUrlPath?.(room.code);
-  const link =
-    ctx.appBaseUrl && path
-      ? `${ctx.appBaseUrl}${path}${seatToken ? `?seat=${encodeURIComponent(after)}&token=${encodeURIComponent(seatToken)}` : ''}`
-      : null;
+  const link = ctx.appBaseUrl && path ? `${ctx.appBaseUrl}${path}` : null;
   const subject = `It's your turn in ${ctx.module.displayName}!`;
   const text = link
     ? `It's your turn in ${ctx.module.displayName} — room ${room.code}.\n\n${link}`

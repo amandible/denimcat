@@ -6,8 +6,10 @@ import { invalidateSession, loadSessionToken } from './authToken';
 import { SERVER_URL } from '../socket';
 
 /**
- * Reads `?seat=&token=` (a turn-notification email's reconnect link — see
- * RoomStore.notifyTurnIfOffline) and strips them from the visible URL right
+ * Reads `?seat=&token=` (the reconnect link in turn-notification emails
+ * sent before 2026-11-17 — newer emails link to the bare room URL and rely
+ * on reconnect_by_account instead, see notifyTurn in roomNotifications.ts;
+ * kept so links already sitting in inboxes still work) and strips them from the visible URL right
  * away, so the seat token doesn't linger in the address bar/history any
  * longer than the one reconnect attempt needs it for. Returns null (and
  * touches nothing) when either param is absent — the normal case for every
@@ -134,7 +136,7 @@ export function useRoomConnection<TView>(
         joinFixedRole(socket, fixedRole);
         return;
       }
-      // A turn-notification email's reconnect link (?seat=&token=) takes
+      // An older turn-notification email's reconnect link (?seat=&token=) takes
       // priority over anything already in localStorage — e.g. opening it on
       // a different device/browser than the one that originally joined.
       const linked = consumeReconnectLinkParams();

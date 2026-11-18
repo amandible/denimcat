@@ -4,6 +4,26 @@ import { clearGraceTimer, getRoom, persist, startGraceTimer } from './roomCore';
 import { broadcastRoomInfo, viewFor } from './roomBroadcast';
 import type { RoomStoreContext } from './roomStoreContext';
 
+/**
+ * On a seat takeover (another tab/device reclaiming a still-live seat),
+ * drops the PREVIOUS socket's binding to that seat. Without this the old
+ * socket kept its binding, so it could still make moves (applyAction only
+ * checks the binding) or even free the seat out from under the new holder
+ * via leave_seat. Only removes the binding if it still points at this
+ * exact room+seat — the old socket may since have moved on elsewhere.
+ */
+function releaseSupersededSocket<TState, TConfig, TSeat extends string>(
+  ctx: RoomStoreContext<TState, TConfig, TSeat>,
+  code: string,
+  role: TSeat,
+  previousSocketId: string | null,
+  newSocketId: string,
+): void {
+  if (!previousSocketId || previousSocketId === newSocketId) return;
+  const binding = ctx.socketBindings.get(previousSocketId);
+  if (binding && binding.code === code && binding.role === role) ctx.socketBindings.delete(previousSocketId);
+}
+
 export async function joinRoom<TState, TConfig, TSeat extends string>(
   ctx: RoomStoreContext<TState, TConfig, TSeat>,
   code: string,
@@ -88,6 +108,7 @@ export async function reconnectRoom<TState, TConfig, TSeat extends string>(
   }
 
   clearGraceTimer(ctx, code, role);
+  releaseSupersededSocket(ctx, code, role, seat.socketId, socketId);
   seat.socketId = socketId;
   seat.disconnectedAt = null;
   // Backfills knownAccounts for a seat that predates this feature, or was
@@ -148,6 +169,7 @@ export async function reconnectByAccount<TState, TConfig, TSeat extends string>(
   const existing = room.seats[role];
   if (existing) {
     clearGraceTimer(ctx, code, role);
+    releaseSupersededSocket(ctx, code, role, existing.socketId, socketId);
     existing.socketId = socketId;
     existing.disconnectedAt = null;
     ctx.socketBindings.set(socketId, { code, role });
