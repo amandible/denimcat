@@ -15,7 +15,23 @@
  */
 const postgres = require('postgres');
 
+function printHelp() {
+  console.log(`Usage: DATABASE_URL=... node scripts/migrate-room-data-encoding.js [--apply]
+
+Unwraps rooms.data rows written before 2026-11-04 that were stored as a
+jsonb STRING holding JSON text (double-encoded) instead of a jsonb object.
+Idempotent: correctly stored rows are left untouched.
+
+  (no flag)   dry run — lists affected room codes, changes nothing
+  --apply     actually migrate the affected rows
+  --help      show this message`);
+}
+
 async function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printHelp();
+    return;
+  }
   const apply = process.argv.includes('--apply');
   const url = process.env.DATABASE_URL;
   if (!url) {

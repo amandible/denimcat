@@ -56,7 +56,9 @@ export interface RoomStoreOptions {
  *
  * Mostly a thin facade: every method delegates to a plain function in
  * roomCore.ts/roomBroadcast.ts/etc., passing the one `ctx` object built in
- * the constructor. See docs/superpowers/specs/2026-11-04-roomstore-decomposition-design.md.
+ * the constructor. See docs/superpowers/specs/2026-11-04-roomstore-decomposition-design.md,
+ * and docs/guides/rooms-seats-and-identity.md for how seats, ownership,
+ * reconnection, and room lifetime fit together.
  */
 export class RoomStore<TState, TConfig, TSeat extends string> {
   private ctx: RoomStoreContext<TState, TConfig, TSeat>;

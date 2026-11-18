@@ -103,6 +103,9 @@ example):
   `.then(cb).catch(error => { console.error(...); cb({ok:false, error: INTERNAL_ERROR}) })`.
 - `validate.ts` — small type-guard functions for this game's payload
   shapes (`isCardArray`, `isSlotIndex`, etc.).
+- You don't implement seats, reconnection, or room cleanup — the
+  platform does. `docs/guides/rooms-seats-and-identity.md` explains how
+  they work, which matters for `getActiveSeat`/`isRoomFinished`.
 - Register in `packages/server/src/index.ts`: import the module, then add
   one line, `registerGame(xModule);`, next to the others. Also add the
   game id to `EXPECTED_GAMES` in `scripts/smoke-test-server.js`.
