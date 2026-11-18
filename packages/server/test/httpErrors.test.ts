@@ -72,6 +72,6 @@ describe('HTTP routes when a store call throws', () => {
       signal: AbortSignal.timeout(2000),
     }).catch(() => {});
     const health = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(2000) });
-    expect(await health.json()).toEqual({ ok: true });
+    expect((await health.json()).ok).toBe(true);
   });
 });

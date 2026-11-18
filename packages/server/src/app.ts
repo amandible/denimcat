@@ -18,8 +18,11 @@ export function createApp(deps: {
   if (deps.surveyRepository) {
     app.use('/survey-responses', surveyRouter(deps.authService, deps.gameStores ?? [], deps.surveyRepository, deps.clientOrigins));
   }
+  // `games` lets a post-deploy check confirm every game actually got
+  // registered (see scripts/smoke-test-server.js). Read at request time:
+  // index.ts fills gameStores in after createApp returns.
   app.get('/health', (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, games: (deps.gameStores ?? []).map((entry) => entry.module.id) });
   });
   app.use(jsonErrorHandler);
   return app;

@@ -1,20 +1,6 @@
 import 'dotenv/config';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import type { Color, GameState as HyperBloomState } from '@denimcat/engine-hyperbloom';
-import type {
-  GameState as MintConditionState,
-  MintConditionConfig,
-  SeatId as MintConditionSeatId,
-} from '@denimcat/engine-mint-condition';
-import type {
-  GameState as LoveTrianglesState,
-  LoveTrianglesConfig,
-  SeatId as LoveTrianglesSeatId,
-} from '@denimcat/engine-love-triangles';
-import type { Color as TashKalarSeatId, GameState as TashKalarState, TashKalarConfig } from '@denimcat/engine-tashkalar';
-import type { Color as KingsGateSeatId, GameState as KingsGateState, KingsGateConfig } from '@denimcat/engine-kingsgate';
-import type { DetourConfig, GameState as DetourState, SeatId as DetourSeatId } from '@denimcat/engine-detour';
 import {
   RoomStore,
   attachSocketHandlers,
@@ -25,6 +11,7 @@ import {
   createDefaultRoomRepository,
   createDefaultSurveyRepository,
   ensureSchema,
+  type GameModule,
   type RoomStoreOptions,
 } from '@denimcat/platform';
 import { createApp } from './app';
@@ -118,66 +105,22 @@ async function main() {
     appBaseUrl,
   };
 
-  const hyperBloomRepository = createDefaultRoomRepository<HyperBloomState, Color>();
-  const hyperBloomNsp = io.of(hyperBloomModule.namespace);
-  const hyperBloomStore = new RoomStore(hyperBloomModule, hyperBloomRepository, hyperBloomNsp, roomStoreOptions);
-  attachSocketHandlers(hyperBloomNsp, hyperBloomStore, hyperBloomModule);
-  gameStores.push({ module: hyperBloomModule, store: hyperBloomStore });
+  // Every game gets its own namespace, RoomStore, and repository (all
+  // repositories share one `rooms` table, keyed by gameId). To add a game,
+  // add one line here — see docs/adding-a-new-game.md.
+  function registerGame<TState, TConfig, TSeat extends string>(module: GameModule<TState, TConfig, TSeat>): void {
+    const nsp = io.of(module.namespace);
+    const store = new RoomStore(module, createDefaultRoomRepository<TState, TSeat>(), nsp, roomStoreOptions);
+    attachSocketHandlers(nsp, store, module);
+    gameStores.push({ module, store });
+  }
 
-  const mintConditionRepository = createDefaultRoomRepository<MintConditionState, MintConditionSeatId>();
-  const mintConditionNsp = io.of(mintConditionModule.namespace);
-  const mintConditionStore = new RoomStore<MintConditionState, MintConditionConfig, MintConditionSeatId>(
-    mintConditionModule,
-    mintConditionRepository,
-    mintConditionNsp,
-    roomStoreOptions,
-  );
-  attachSocketHandlers(mintConditionNsp, mintConditionStore, mintConditionModule);
-  gameStores.push({ module: mintConditionModule, store: mintConditionStore });
-
-  const loveTrianglesRepository = createDefaultRoomRepository<LoveTrianglesState, LoveTrianglesSeatId>();
-  const loveTrianglesNsp = io.of(loveTrianglesModule.namespace);
-  const loveTrianglesStore = new RoomStore<LoveTrianglesState, LoveTrianglesConfig, LoveTrianglesSeatId>(
-    loveTrianglesModule,
-    loveTrianglesRepository,
-    loveTrianglesNsp,
-    roomStoreOptions,
-  );
-  attachSocketHandlers(loveTrianglesNsp, loveTrianglesStore, loveTrianglesModule);
-  gameStores.push({ module: loveTrianglesModule, store: loveTrianglesStore });
-
-  const detourRepository = createDefaultRoomRepository<DetourState, DetourSeatId>();
-  const detourNsp = io.of(detourModule.namespace);
-  const detourStore = new RoomStore<DetourState, DetourConfig, DetourSeatId>(
-    detourModule,
-    detourRepository,
-    detourNsp,
-    roomStoreOptions,
-  );
-  attachSocketHandlers(detourNsp, detourStore, detourModule);
-  gameStores.push({ module: detourModule, store: detourStore });
-
-  const tashKalarRepository = createDefaultRoomRepository<TashKalarState, TashKalarSeatId>();
-  const tashKalarNsp = io.of(tashKalarModule.namespace);
-  const tashKalarStore = new RoomStore<TashKalarState, TashKalarConfig, TashKalarSeatId>(
-    tashKalarModule,
-    tashKalarRepository,
-    tashKalarNsp,
-    roomStoreOptions,
-  );
-  attachSocketHandlers(tashKalarNsp, tashKalarStore, tashKalarModule);
-  gameStores.push({ module: tashKalarModule, store: tashKalarStore });
-
-  const kingsGateRepository = createDefaultRoomRepository<KingsGateState, KingsGateSeatId>();
-  const kingsGateNsp = io.of(kingsGateModule.namespace);
-  const kingsGateStore = new RoomStore<KingsGateState, KingsGateConfig, KingsGateSeatId>(
-    kingsGateModule,
-    kingsGateRepository,
-    kingsGateNsp,
-    roomStoreOptions,
-  );
-  attachSocketHandlers(kingsGateNsp, kingsGateStore, kingsGateModule);
-  gameStores.push({ module: kingsGateModule, store: kingsGateStore });
+  registerGame(hyperBloomModule);
+  registerGame(mintConditionModule);
+  registerGame(loveTrianglesModule);
+  registerGame(detourModule);
+  registerGame(tashKalarModule);
+  registerGame(kingsGateModule);
 
   const port = Number(process.env.PORT ?? 4000);
   httpServer.listen(port, () => {
