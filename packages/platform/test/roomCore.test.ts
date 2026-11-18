@@ -36,6 +36,7 @@ function makeCtx(repository: InMemoryRoomRepository<TestState, TestSeat>): RoomS
     nsp: fakeNamespace(),
     cache: new Map(),
     hydrating: new Map(),
+    writeQueue: new Map(),
     socketBindings: new Map(),
     graceTimers: new Map(),
     graceMs: 2 * 60 * 1000,

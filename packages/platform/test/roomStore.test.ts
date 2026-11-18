@@ -1172,3 +1172,51 @@ describe('RoomStore.abandonRoom and OpenGameSummary.abandonable', () => {
     store.stop();
   });
 });
+
+describe('RoomStore — persistence write ordering', () => {
+  /** An in-memory repo whose next save can be held open, to simulate one DB write landing slower than a later one (separate pooled connections). */
+  class SlowFirstSaveRepository extends InMemoryRoomRepository<TestState, TestSeat> {
+    private held: { release: () => void } | null = null;
+    private holdArmed = false;
+
+    holdNextSave(): void {
+      this.holdArmed = true;
+    }
+
+    releaseHeldSave(): void {
+      this.held?.release();
+      this.held = null;
+    }
+
+    override async save(room: Parameters<InMemoryRoomRepository<TestState, TestSeat>['save']>[0]): Promise<void> {
+      if (this.holdArmed) {
+        this.holdArmed = false;
+        await new Promise<void>((resolve) => {
+          this.held = { release: resolve };
+        });
+      }
+      return super.save(room);
+    }
+  }
+
+  it('a slow earlier save can never overwrite a later one — the repository ends up holding the newest state', async () => {
+    const repo = new SlowFirstSaveRepository();
+    const store = new RoomStore(makeModule(), repo, fakeNamespace());
+    const created = await store.createRoom(undefined);
+    if (!created.ok) throw new Error('createRoom failed');
+    const code = created.roomCode;
+    expect((await store.joinRoom(code, 'p1', 'socket-1')).ok).toBe(true);
+
+    repo.holdNextSave();
+    const first = store.applyAction(code, 'socket-1', (state) => ok({ value: state.value + 1 }));
+    const second = store.applyAction(code, 'socket-1', (state) => ok({ value: state.value + 1 }));
+
+    // Give the second action every chance to finish its own save first.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    repo.releaseHeldSave();
+    await Promise.all([first, second]);
+
+    expect((await repo.get(code))?.gameState.value).toBe(2);
+    store.stop();
+  });
+});

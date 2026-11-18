@@ -69,6 +69,7 @@ export class RoomStore<TState, TConfig, TSeat extends string> {
       nsp,
       cache: new Map(),
       hydrating: new Map(),
+      writeQueue: new Map(),
       socketBindings: new Map(),
       graceTimers: new Map(),
       graceMs: options.graceMs ?? RECONNECT_GRACE_MS,

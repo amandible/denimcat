@@ -133,7 +133,29 @@ export async function persist<TState, TConfig, TSeat extends string>(
     createdAt: room.createdAt,
     lastActivityAt: room.lastActivityAt,
   };
-  await ctx.repository.save(persisted);
+  await enqueueWrite(ctx, room.code, () => ctx.repository.save(persisted));
+}
+
+/**
+ * Runs `write` only after every previously-enqueued write for this room
+ * has finished (successfully or not) — see RoomStoreContext.writeQueue.
+ * Callers must build whatever they're writing BEFORE calling this (as
+ * persist does with its snapshot), so each queued write carries the state
+ * as of the moment it was issued.
+ */
+export async function enqueueWrite<TState, TConfig, TSeat extends string>(
+  ctx: RoomStoreContext<TState, TConfig, TSeat>,
+  code: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  const previous = ctx.writeQueue.get(code) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(write);
+  ctx.writeQueue.set(code, next);
+  try {
+    await next;
+  } finally {
+    if (ctx.writeQueue.get(code) === next) ctx.writeQueue.delete(code);
+  }
 }
 
 /**

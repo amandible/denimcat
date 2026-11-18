@@ -89,6 +89,16 @@ export interface RoomStoreContext<TState, TConfig, TSeat extends string> {
    * receives another broadcast again.
    */
   hydrating: Map<string, Promise<LiveRoom<TState, TSeat> | null>>;
+  /**
+   * Tail of each room's chain of pending repository writes (see
+   * enqueueWrite in roomCore.ts). Every save/delete for a room waits for
+   * the previous one to finish, so writes reach the database in the order
+   * they were issued — without this, two quick mutations' saves could run
+   * on separate pooled connections and commit out of order, leaving the
+   * database holding the OLDER state (silently rewinding a move on the
+   * next restart). Entries are removed once their chain drains.
+   */
+  writeQueue: Map<string, Promise<void>>;
   socketBindings: Map<string, SocketBinding<TSeat>>;
   graceTimers: Map<string, NodeJS.Timeout>;
   graceMs: number;

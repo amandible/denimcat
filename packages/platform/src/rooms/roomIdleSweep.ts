@@ -1,5 +1,5 @@
 import type { ActionResult } from '@denimcat/shared';
-import { clearGraceTimer, getRoom } from './roomCore';
+import { clearGraceTimer, enqueueWrite, getRoom } from './roomCore';
 import type { LiveRoom, OpenGameSummary, RoomStoreContext } from './roomStoreContext';
 
 /**
@@ -81,7 +81,7 @@ export async function abandonRoom<TState, TConfig, TSeat extends string>(
   for (const seat of room.seatOrder) clearGraceTimer(ctx, code, seat);
   ctx.nsp.to(code).emit('room_closed', { reason: 'abandoned' });
   ctx.cache.delete(code);
-  await ctx.repository.delete(code);
+  await enqueueWrite(ctx, code, () => ctx.repository.delete(code));
   return { ok: true };
 }
 
@@ -159,7 +159,7 @@ export async function sweepIdleRooms<TState, TConfig, TSeat extends string>(ctx:
     const hasActiveSpectator = room.spectatorSocketIds.size > 0;
     if (!hasActiveSpectator && !isPermanentlyExemptFromSweep(ctx, room) && now - room.lastActivityAt > idleTimeoutFor(ctx, room) && recapFullyViewed(ctx, room)) {
       ctx.cache.delete(code);
-      await ctx.repository.delete(code);
+      await enqueueWrite(ctx, code, () => ctx.repository.delete(code));
     }
   }
 }
