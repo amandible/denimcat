@@ -23,13 +23,42 @@ export interface AuctionRewardChoiceV2 {
  * practice this supports: grow this interface only when a real version
  * needs a new seam, never speculatively ahead of time.
  */
+/**
+ * v3's consolation-reward choice: the "add a prize" toggle is dropped
+ * entirely (confirmed with the designer — v3 keeps only the accelerate
+ * option), so this is its own shape rather than a subset of
+ * AuctionRewardChoiceV2.
+ */
+export interface AuctionRewardChoiceV3 {
+  extraShift: boolean;
+}
+
 export interface MintConditionRuleset {
   drawPostAuctionCards(state: GameState, winnerSeat: SeatId, firstPasserSeat: SeatId | null): GameState;
   /**
    * `reward`'s type grew to a union the moment v2 actually needed a
    * differently-shaped payload (see AuctionRewardChoiceV2) — v1's own
-   * implementation only ever handles the AuctionReward half of it.
+   * implementation only ever handles the AuctionReward half of it. Grew
+   * again for v3's own shape (AuctionRewardChoiceV3).
    */
-  chooseAuctionReward(state: GameState, seat: SeatId, reward: AuctionReward | AuctionRewardChoiceV2, rules?: MintConditionRuleset): EngineResult;
+  chooseAuctionReward(
+    state: GameState,
+    seat: SeatId,
+    reward: AuctionReward | AuctionRewardChoiceV2 | AuctionRewardChoiceV3,
+    rules?: MintConditionRuleset,
+  ): EngineResult;
   placeNewPrize(state: GameState, seat: SeatId, slotIndex: number, rules?: MintConditionRuleset): EngineResult;
+  /**
+   * What happens when every seat passes without anyone ever bidding —
+   * v1/v2: nothing (no-op). New seam for v3, whose universal per-round draw
+   * extends to a no-bid round too (confirmed with the designer).
+   */
+  drawCardsOnNoWinner(state: GameState): GameState;
+  /**
+   * Both the game-over trigger and its resolution — v1/v2: isGameOver's
+   * trigger (deck AND every slot empty) plus a plain highest-score winner.
+   * New seam for v3, whose trigger and resolution are both different (see
+   * endgame.ts's applyGameEndIfDoneV3).
+   */
+  applyGameEndIfDone(state: GameState): GameState;
 }

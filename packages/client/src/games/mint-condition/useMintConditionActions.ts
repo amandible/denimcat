@@ -1,5 +1,10 @@
 import { useCallback } from 'react';
-import type { AuctionReward, AuctionRewardChoiceV2, MintConditionStateView } from '@denimcat/engine-mint-condition';
+import type {
+  AuctionReward,
+  AuctionRewardChoiceV2,
+  AuctionRewardChoiceV3,
+  MintConditionStateView,
+} from '@denimcat/engine-mint-condition';
 import { useRoomConnection } from '../../state/useRoomConnection';
 
 export function useMintConditionActions(roomCode: string, options?: { role?: string }) {
@@ -9,15 +14,20 @@ export function useMintConditionActions(roomCode: string, options?: { role?: str
   const pass = useCallback(() => connection.sendAction('pass'), [connection]);
   const takePrize = useCallback((prizeId: string) => connection.sendAction('take_prize', { prizeId }), [connection]);
   const chooseAuctionReward = useCallback(
-    (reward: AuctionReward | AuctionRewardChoiceV2) => connection.sendAction('choose_auction_reward', { reward }),
+    (reward: AuctionReward | AuctionRewardChoiceV2 | AuctionRewardChoiceV3) =>
+      connection.sendAction('choose_auction_reward', { reward }),
     [connection],
   );
   const placeNewPrize = useCallback(
     (slotIndex: number) => connection.sendAction('place_new_prize', { slotIndex }),
     [connection],
   );
+  const chooseEndgamePrize = useCallback(
+    (prizeId: string) => connection.sendAction('choose_endgame_prize', { prizeId }),
+    [connection],
+  );
 
-  return { ...connection, placeBid, pass, takePrize, chooseAuctionReward, placeNewPrize };
+  return { ...connection, placeBid, pass, takePrize, chooseAuctionReward, placeNewPrize, chooseEndgamePrize };
 }
 
 export type MintConditionConnection = ReturnType<typeof useMintConditionActions>;

@@ -32,6 +32,10 @@ function clonePlayer(p: PlayerState): PlayerState {
     seat: p.seat,
     deck: [...p.deck],
     hand: [...p.hand],
+    // `?? []` guards a room persisted before v3 added this field — its
+    // stored PlayerState predates `discard` entirely, so a plain `[...p.discard]`
+    // would throw on the very first action after this deploy.
+    discard: [...(p.discard ?? [])],
     wonPrizes: p.wonPrizes.map((prize) => ({ ...prize })),
   };
 }
@@ -67,6 +71,7 @@ export function cloneState(state: GameState): GameState {
     winner: state.winner ? [...state.winner] : null,
     unlockedUpperSlots: [...state.unlockedUpperSlots],
     discardPile: state.discardPile.map((p) => ({ ...p })),
+    endgameChoice: state.endgameChoice ? { seat: state.endgameChoice.seat, prizeIds: [...state.endgameChoice.prizeIds] } : null,
     log: [...state.log],
   };
 }

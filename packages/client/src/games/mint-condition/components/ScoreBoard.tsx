@@ -1,7 +1,16 @@
-import { scoreForPrizes, type MintConditionStateView, type SeatId } from '@denimcat/engine-mint-condition';
+import { scoreForPrizes, type MintConditionStateView, type PrizeCard, type ScoreBreakdown, type SeatId } from '@denimcat/engine-mint-condition';
 import { PrizeChip } from './PrizeChip';
 
-export function ScoreBoard({ state, displayLabel }: { state: MintConditionStateView; displayLabel: (seat: SeatId) => string }) {
+export function ScoreBoard({
+  state,
+  displayLabel,
+  scoreFn = scoreForPrizes,
+}: {
+  state: MintConditionStateView;
+  displayLabel: (seat: SeatId) => string;
+  /** Picks the version's own color-bonus formula — see GameView.tsx, which resolves scoreForPrizes vs scoreForPrizesV3 by rulesetVersion. Defaults to v1/v2's formula. */
+  scoreFn?: (prizes: PrizeCard[]) => ScoreBreakdown;
+}) {
   const ended = state.phase === 'ended';
 
   return (
@@ -9,7 +18,7 @@ export function ScoreBoard({ state, displayLabel }: { state: MintConditionStateV
       <h3>Score</h3>
       {state.seats.map((seat) => {
         const wonPrizes = state.players[seat].wonPrizes;
-        const { base, colorBonus, total } = scoreForPrizes(wonPrizes);
+        const { base, colorBonus, total } = scoreFn(wonPrizes);
         const isWinner = ended && state.winner?.includes(seat);
         return (
           <div key={seat} style={{ margin: '10px 0' }}>

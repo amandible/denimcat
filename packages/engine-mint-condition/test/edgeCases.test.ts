@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getLegalBidOptions, pass, placeBid } from '../src/bidding';
-import { placeNewPrize, takePrize } from '../src/prizes';
+import { chooseAuctionReward, eligibleTakeSlotIndex, placeNewPrize, takePrize } from '../src/prizes';
 import { dealGame } from '../src/setup';
 import { makeState } from './helpers';
 import type { GameState } from '../src/types';
@@ -48,16 +48,23 @@ describe('full 2-player game smoke test', () => {
 
       // No choice of slot under the current rules: must take from the
       // priciest occupied slot within the bid (see eligibleTakeSlotIndex).
-      const eligibleSlot = [...state.priceSlots].reverse().find((slot) => slot.price <= cheapest.amount && slot.prizes.length > 0);
-      if (!eligibleSlot) break; // can't afford anything yet, stop this smoke run early
-
-      const chosen = eligibleSlot.prizes[0];
+      const eligibleIndex = eligibleTakeSlotIndex(state.priceSlots, cheapest.amount);
       const beforeScoreSeats = [...state.seats];
-      const takeResult = takePrize(state, bidderSeat, chosen.id);
-      expect(takeResult.ok).toBe(true);
-      if (!takeResult.ok) return;
-      state = takeResult.state;
-      expect(state.players[bidderSeat].wonPrizes.map((p) => p.id)).toContain(chosen.id);
+
+      if (eligibleIndex === null) {
+        // Nothing to take this round — exercise the consolation reward instead.
+        const rewardResult = state.auction.highestBid && chooseAuctionReward(state, bidderSeat, 'draw_cards');
+        expect(rewardResult?.ok).toBe(true);
+        if (!rewardResult?.ok) return;
+        state = rewardResult.state;
+      } else {
+        const chosen = state.priceSlots[eligibleIndex].prizes[0];
+        const takeResult = takePrize(state, bidderSeat, chosen.id);
+        expect(takeResult.ok).toBe(true);
+        if (!takeResult.ok) return;
+        state = takeResult.state;
+        expect(state.players[bidderSeat].wonPrizes.map((p) => p.id)).toContain(chosen.id);
+      }
       expect(state.seats).toEqual(beforeScoreSeats); // seats never change mid-game
 
       if (state.phase === 'ended') break;

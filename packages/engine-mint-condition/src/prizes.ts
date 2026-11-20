@@ -5,6 +5,16 @@ import { ok, err } from './result';
 import { drawCardForSeat, drawPostAuctionCards } from './decks';
 import { applyGameEndIfDone } from './scoring';
 
+/** v1/v2: nothing happens when every seat passes without anyone ever bidding. */
+function drawCardsOnNoWinner(state: GameState): GameState {
+  return state;
+}
+
+/** True once the game has either fully ended, or is paused awaiting the v3 endgame tie-break choice — both mean "stop running normal round logic." */
+function isGameEffectivelyOver(state: GameState): boolean {
+  return state.phase === 'ended' || state.phase === 'awaiting-endgame-prize-choice';
+}
+
 /**
  * Every unbought prize drifts one slot toward the priciest end (index 5) —
  * unsold prizes get more expensive over time. A prize already at index 5
@@ -68,8 +78,8 @@ export function concludeAuction(state: GameState, rules: MintConditionRuleset = 
   const firstPasserSeat = state.auction.passedSeats[0] ?? null;
 
   let next = rules.drawPostAuctionCards(state, winnerSeat, firstPasserSeat);
-  next = applyGameEndIfDone(next);
-  if (next.phase === 'ended') return next;
+  next = rules.applyGameEndIfDone(next);
+  if (isGameEffectivelyOver(next)) return next;
 
   next = cloneState(next);
   next.auction = startAuction(next.seats, winnerSeat);
@@ -97,8 +107,8 @@ export function afterPrizeChoice(
 ): GameState {
   let next = shiftDisplay(state);
   if (afterShift) next = afterShift(next);
-  next = applyGameEndIfDone(next);
-  if (next.phase === 'ended') return next;
+  next = rules.applyGameEndIfDone(next);
+  if (isGameEffectivelyOver(next)) return next;
 
   if (next.prizeDeck.length > 0) {
     next = cloneState(next);
@@ -289,4 +299,10 @@ export function placeNewPrize(
  * — the baseline every version's default `rules` parameter falls back
  * to. See docs/guides/game-rule-versions.md.
  */
-export const v1Ruleset: MintConditionRuleset = { drawPostAuctionCards, chooseAuctionReward, placeNewPrize };
+export const v1Ruleset: MintConditionRuleset = {
+  drawPostAuctionCards,
+  chooseAuctionReward,
+  placeNewPrize,
+  drawCardsOnNoWinner,
+  applyGameEndIfDone,
+};

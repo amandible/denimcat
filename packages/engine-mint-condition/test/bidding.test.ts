@@ -60,10 +60,17 @@ describe('placeBid', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('rejects a bid repeating the same card twice', () => {
+  it('rejects a bid using more copies of a value than the hand actually holds', () => {
     const state = makeState({ players: { p1: { hand: [5, 6] } } });
     const result = placeBid(state, 'p1', [5, 5]);
     expect(result.ok).toBe(false);
+  });
+
+  it('accepts a bid spending two cards of the same value, when the hand holds two of that value (v3\'s non-unique money deck)', () => {
+    const state = makeState({ players: { p1: { hand: [10, 10, 5] }, p2: { hand: [1] } } });
+    const result = placeBid(state, 'p1', [10, 10]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.state.auction.highestBid).toEqual({ seat: 'p1', cardValues: [10, 10], amount: 20 });
   });
 
   it('rejects a bid that does not exceed the current highest bid', () => {
@@ -95,6 +102,30 @@ describe('placeBid', () => {
     expect(passed.state.log).toEqual(
       expect.arrayContaining(['p1 bid 5.', 'p2 passed.', 'p1 won the auction for 5.']),
     );
+  });
+
+  it('moves the winner\'s spent cards to their discard pile rather than erasing them', () => {
+    const state = makeState({ players: { p1: { hand: [5, 1], discard: [10] }, p2: { hand: [3] } } });
+    const bid = placeBid(state, 'p1', [5]);
+    expect(bid.ok).toBe(true);
+    if (!bid.ok) return;
+    const passed = pass(bid.state, 'p2');
+    expect(passed.ok).toBe(true);
+    if (!passed.ok) return;
+    expect(passed.state.players.p1.hand).toEqual([1]);
+    expect(passed.state.players.p1.discard).toEqual([10, 5]);
+  });
+
+  it('spending one of two same-valued cards leaves the other copy in hand, not both (v3\'s non-unique money deck)', () => {
+    const state = makeState({ players: { p1: { hand: [10, 10, 5] }, p2: { hand: [1] } } });
+    const bid = placeBid(state, 'p1', [10]);
+    expect(bid.ok).toBe(true);
+    if (!bid.ok) return;
+    const passed = pass(bid.state, 'p2');
+    expect(passed.ok).toBe(true);
+    if (!passed.ok) return;
+    expect(passed.state.players.p1.hand.sort((a, b) => a - b)).toEqual([5, 10]);
+    expect(passed.state.players.p1.discard).toEqual([10]);
   });
 });
 
@@ -146,7 +177,7 @@ describe('pass', () => {
       players: { p1: { hand: [5] }, p2: { hand: [3] } },
       priceSlots: [
         { price: 1, prizes: [] },
-        { price: 2, prizes: [{ id: 'a', color: 'red', points: 1 }] },
+        { price: 2, prizes: [{ id: 'a', color: 'red', points: 1, name: 'test prize' }] },
         { price: 3, prizes: [] },
         { price: 4, prizes: [] },
         { price: 5, prizes: [] },
@@ -165,7 +196,7 @@ describe('pass', () => {
     expect(step2.state.phase).toBe('auction-active');
     expect(step2.state.players.p1.hand).toEqual([5]);
     expect(step2.state.players.p2.hand).toEqual([3]);
-    expect(step2.state.priceSlots[2].prizes).toEqual([{ id: 'a', color: 'red', points: 1 }]);
+    expect(step2.state.priceSlots[2].prizes).toEqual([{ id: 'a', color: 'red', points: 1, name: 'test prize' }]);
     expect(step2.state.priceSlots[1].prizes).toEqual([]);
     // Opener rotates to the next seat for the new auction.
     expect(step2.state.auction.openerSeat).toBe('p2');

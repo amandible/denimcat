@@ -1,11 +1,11 @@
 import type { AuctionState, GameState, PlayerState, PriceSlot, PrizeCard, SeatId } from '../src/types';
 
-export function prize(id: string, color: PrizeCard['color'], points: number): PrizeCard {
-  return { id, color, points };
+export function prize(id: string, color: PrizeCard['color'], points: number, name = 'test prize'): PrizeCard {
+  return { id, color, points, name };
 }
 
 export function makePlayer(seat: SeatId, overrides: Partial<PlayerState> = {}): PlayerState {
-  return { seat, deck: [], hand: [], wonPrizes: [], ...overrides };
+  return { seat, deck: [], hand: [], discard: [], wonPrizes: [], ...overrides };
 }
 
 export function makeAuction(overrides: Partial<AuctionState> = {}): AuctionState {
@@ -36,6 +36,7 @@ export function makeState(
     winner?: SeatId[] | null;
     unlockedUpperSlots?: number[];
     discardPile?: PrizeCard[];
+    endgameChoice?: GameState['endgameChoice'];
     log?: string[];
   } = {},
 ): GameState {
@@ -55,6 +56,7 @@ export function makeState(
     winner: overrides.winner ?? null,
     unlockedUpperSlots: overrides.unlockedUpperSlots ?? [4, 5],
     discardPile: overrides.discardPile ?? [],
+    endgameChoice: overrides.endgameChoice ?? null,
     log: overrides.log ?? [],
   };
 }

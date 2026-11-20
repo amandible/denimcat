@@ -1,5 +1,6 @@
 import type { Socket } from 'socket.io';
 import {
+  chooseEndgamePrize,
   pass,
   placeBid,
   resolveRuleset,
@@ -9,7 +10,7 @@ import {
   type SeatId,
 } from '@denimcat/engine-mint-condition';
 import { isNonEmptyString, type RoomStore } from '@denimcat/platform';
-import { isAuctionReward, isAuctionRewardChoiceV2, isCardArray, isSlotIndex } from './validate';
+import { isAuctionReward, isAuctionRewardChoiceV2, isAuctionRewardChoiceV3, isCardArray, isSlotIndex } from './validate';
 
 type MintConditionStore = RoomStore<GameState, MintConditionConfig, SeatId>;
 
@@ -79,7 +80,7 @@ export function registerMintConditionHandlers(socket: Socket, store: MintConditi
       if (
         !payload ||
         !isNonEmptyString(payload.roomCode) ||
-        !(isAuctionReward(payload.reward) || isAuctionRewardChoiceV2(payload.reward))
+        !(isAuctionReward(payload.reward) || isAuctionRewardChoiceV2(payload.reward) || isAuctionRewardChoiceV3(payload.reward))
       ) {
         cb({ ok: false, error: INVALID_PAYLOAD });
         return;
@@ -108,6 +109,27 @@ export function registerMintConditionHandlers(socket: Socket, store: MintConditi
         .then(cb)
         .catch((error) => {
           console.error('[socket:mint-condition] place_new_prize failed:', error);
+          cb({ ok: false, error: INTERNAL_ERROR });
+        });
+    },
+  );
+
+  // v3-only action (see GameState.endgameChoice); not ruleset-dispatched
+  // since a v1/v2 room's phase can never be 'awaiting-endgame-prize-choice'
+  // — chooseEndgamePrize just rejects it cleanly for those rooms.
+  socket.on(
+    'choose_endgame_prize',
+    (payload: { roomCode?: unknown; prizeId?: unknown }, cb: (res: unknown) => void) => {
+      if (!payload || !isNonEmptyString(payload.roomCode) || !isNonEmptyString(payload.prizeId)) {
+        cb({ ok: false, error: INVALID_PAYLOAD });
+        return;
+      }
+      const { roomCode, prizeId } = payload;
+      store
+        .applyAction(roomCode, socket.id, (state, seat) => chooseEndgamePrize(state, seat, prizeId))
+        .then(cb)
+        .catch((error) => {
+          console.error('[socket:mint-condition] choose_endgame_prize failed:', error);
           cb({ ok: false, error: INTERNAL_ERROR });
         });
     },

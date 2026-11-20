@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { cardsForRewardTier, eligibleTakeSlotIndex, slotIndexForBid, type SeatId } from '@denimcat/engine-mint-condition';
+import {
+  cardsForRewardTier,
+  cardsForRewardTierV3,
+  eligibleTakeSlotIndex,
+  scoreForPrizesV3,
+  slotIndexForBid,
+  type SeatId,
+} from '@denimcat/engine-mint-condition';
 import type { MintConditionConnection } from './useMintConditionActions';
 import { PriceSlotTrack } from './components/PriceSlotTrack';
 import { AuctionStatusPanel } from './components/AuctionStatusPanel';
@@ -8,8 +15,10 @@ import { BidOptionsList } from './components/BidOptionsList';
 import { PassButton } from './components/PassButton';
 import { PrizeChoicePanel } from './components/PrizeChoicePanel';
 import { PrizeChoicePanelV2 } from './components/PrizeChoicePanelV2';
+import { PrizeChoicePanelV3 } from './components/PrizeChoicePanelV3';
 import { NewPrizeSlotPicker } from './components/NewPrizeSlotPicker';
 import { NewPrizeSlotPickerV2 } from './components/NewPrizeSlotPickerV2';
+import { EndgamePrizeChoicePanel } from './components/EndgamePrizeChoicePanel';
 import { ScoreBoard } from './components/ScoreBoard';
 import { PlayerCounts } from './components/PlayerCounts';
 import { resolveRulesContent } from './rulesVersions';
@@ -30,19 +39,23 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   // a room older than versioning itself, both treated as "v1" here too.
   const rulesetVersion = connection.roomInfo?.rulesetVersion;
   const isV2 = (rulesetVersion ?? 'v1') === 'v2';
+  const isV3 = rulesetVersion === 'v3';
   const RulesContentForVersion = resolveRulesContent(rulesetVersion);
 
   const mySeat = you.role !== 'spectator' ? (you.role as SeatId) : null;
-  // Whoever needs to act next: the active bidder during a live auction, or
-  // the winner during the two post-auction phases (choosing/placing a
-  // prize) — the game is just as much "waiting on someone" there as it is
-  // mid-auction, even though nobody's placing a bid.
+  // Whoever needs to act next: the active bidder during a live auction, the
+  // winner during the two post-auction phases (choosing/placing a prize),
+  // or (v3 only) whoever must resolve the endgame tie-break — the game is
+  // just as much "waiting on someone" there as it is mid-auction, even
+  // though nobody's placing a bid.
   const pendingSeat: SeatId | null =
     gameState.phase === 'auction-active'
       ? gameState.auction.activeSeat
       : gameState.phase === 'awaiting-prize-choice' || gameState.phase === 'awaiting-new-prize-placement'
         ? gameState.auction.winnerSeat
-        : null;
+        : gameState.phase === 'awaiting-endgame-prize-choice'
+          ? (gameState.endgameChoice?.seat ?? null)
+          : null;
   const isMyTurn = !!mySeat && gameState.phase === 'auction-active' && gameState.auction.activeSeat === mySeat;
   const isWinner = !!mySeat && gameState.auction.winnerSeat === mySeat;
   const myHand = mySeat ? gameState.players[mySeat].hand ?? [] : [];
@@ -69,21 +82,30 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
   // the one phase this preview applies to.
   const hoveredSlotIndex =
     isMyTurn && hoveredBidAmount !== null ? (slotIndexForBid(gameState.priceSlots, hoveredBidAmount) ?? undefined) : undefined;
-  const hoverRewardHint = isV2
-    ? `Reward if you bid here: draw ${cardsForRewardTier(hoveredSlotIndex ?? null)} cards, plus optionally extra shift and/or prize`
-    : undefined;
+  const hoverRewardHint = isV3
+    ? `Reward if you bid here: draw ${cardsForRewardTierV3(hoveredSlotIndex ?? null)} cards, plus optionally accelerate`
+    : isV2
+      ? `Reward if you bid here: draw ${cardsForRewardTier(hoveredSlotIndex ?? null)} cards, plus optionally extra shift and/or prize`
+      : undefined;
 
   const showingPlacement = !!mySeat && isWinner && gameState.phase === 'awaiting-new-prize-placement' && !!gameState.revealedPrize;
   const lastSlotIndex = gameState.priceSlots.length - 1;
   const upperSlotIndices = new Set([lastSlotIndex - 1, lastSlotIndex]);
-  // v2 has no placement choice (always the lowest slot) — no board
-  // affordance to click, just NewPrizeSlotPickerV2's own Confirm button.
+  // v2 and v3 both have no placement choice (always the lowest slot) — no
+  // board affordance to click, just NewPrizeSlotPickerV2's own Confirm
+  // button (v3 reuses it unchanged; see MintConditionRuleset.placeNewPrize).
   const placeableSlots =
-    showingPlacement && !isV2
+    showingPlacement && !isV2 && !isV3
       ? new Set(
           gameState.priceSlots.map((_, i) => i).filter((i) => !upperSlotIndices.has(i) || gameState.unlockedUpperSlots.includes(i)),
         )
       : undefined;
+
+  const showingEndgameChoice =
+    !!mySeat && gameState.phase === 'awaiting-endgame-prize-choice' && gameState.endgameChoice?.seat === mySeat;
+  const tiedEndgamePrizes = showingEndgameChoice
+    ? gameState.priceSlots.flatMap((slot) => slot.prizes).filter((p) => gameState.endgameChoice!.prizeIds.includes(p.id))
+    : [];
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px', display: 'flex', gap: 28, flexWrap: 'wrap' }}>
@@ -137,7 +159,15 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
         )}
 
         {showingPrizeChoice &&
-          (isV2 ? (
+          (isV3 ? (
+            <div style={{ marginTop: 16 }}>
+              <PrizeChoicePanelV3
+                bidAmount={highestBidAmount!}
+                hasEligiblePrize={eligibleSlotIndex !== null}
+                onChooseReward={(reward) => connection.chooseAuctionReward(reward)}
+              />
+            </div>
+          ) : isV2 ? (
             <div style={{ marginTop: 16 }}>
               <PrizeChoicePanelV2
                 bidAmount={highestBidAmount!}
@@ -156,7 +186,7 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
           ))}
 
         {showingPlacement &&
-          (isV2 ? (
+          (isV2 || isV3 ? (
             <div style={{ marginTop: 16 }}>
               <NewPrizeSlotPickerV2 revealedPrize={gameState.revealedPrize!} onConfirm={() => connection.placeNewPrize(0)} />
             </div>
@@ -166,8 +196,17 @@ export function GameView({ roomCode, connection }: { roomCode: string; connectio
             </div>
           ))}
 
+        {showingEndgameChoice && (
+          <div style={{ marginTop: 16 }}>
+            <EndgamePrizeChoicePanel
+              tiedPrizes={tiedEndgamePrizes}
+              onChoose={(prizeId) => connection.chooseEndgamePrize(prizeId)}
+            />
+          </div>
+        )}
+
         <div style={{ marginTop: 16 }}>
-          <ScoreBoard state={gameState} displayLabel={displayLabel} />
+          <ScoreBoard state={gameState} displayLabel={displayLabel} scoreFn={isV3 ? scoreForPrizesV3 : undefined} />
         </div>
 
         {gameState.phase === 'ended' && (

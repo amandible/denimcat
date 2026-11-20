@@ -191,6 +191,45 @@ after that comes back empty should the code be removed:
 5. Delete that version's now-orphaned tests, while keeping every test
    for whatever rules survive as the new baseline.
 
+## Setup/deal functions don't need version threading
+
+`dealGame` (and anything it calls, like Mint Condition's old
+`computePrices`/new `priceSlotValues`) is a special case: it only ever
+runs once, at room creation, and `createRoom` always stamps a brand-new
+room with `currentRulesetVersionId` — there is no code path where
+`dealGame` needs to produce an OLDER version's initial state, because an
+old room's state was already dealt in the past and is only ever
+hydrated from storage, never re-dealt. So when v3 changed the price
+slots and the money-deck composition, those changes were made directly
+in `setup.ts` in place — no `rules` parameter, no `dealGameV3`, no
+spread-override needed. Only functions that operate on an
+*already-persisted* room across its whole lifetime (bidding, scoring,
+drawing) need the rules-threading treatment above.
+
+## New state fields need a backward-compat guard, not just a type change
+
+Adding a new field to a shape that's part of a persisted `GameState`
+(Mint Condition v3 added `PlayerState.discard` and `PrizeCard.name`) only
+changes what a *freshly dealt* room has. A room dealt before that field
+existed is hydrated straight from storage with no migration step — its
+stored object simply doesn't have the key, regardless of what the
+TypeScript type now claims. Any code that reads or spreads the new field
+on arbitrary (not-necessarily-fresh) state needs a runtime fallback:
+
+```ts
+discard: [...(p.discard ?? [])],       // state.ts's clonePlayer
+discardSize: p.discard?.length ?? 0,   // contract.ts's toView
+```
+
+The field most at risk is whichever one gets touched by `cloneState` or
+`toView`, since those run on every single action/view for every room,
+old or new — a missing guard there breaks every in-flight room on the
+previous version the moment the new code deploys, not just new rooms. A
+field that's only read by the NEW version's own override functions (like
+`endgameChoice`, only ever set by v3's own code) doesn't need the
+guard, since a pre-v3 room's state can never reach those functions in
+the first place.
+
 ## Testing across versions
 
 - v1's existing tests are never touched or rewritten — they keep

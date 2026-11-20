@@ -24,3 +24,10 @@ export function isAuctionRewardChoiceV2(value: unknown): value is { extraShift: 
   const { extraShift, addPrize } = value as Record<string, unknown>;
   return typeof extraShift === 'boolean' && typeof addPrize === 'boolean';
 }
+
+/** v3's reward choice shape — the "add a prize" toggle is dropped, so this must NOT also match v2's shape (no `addPrize` key at all). */
+export function isAuctionRewardChoiceV3(value: unknown): value is { extraShift: boolean } {
+  if (typeof value !== 'object' || value === null) return false;
+  const { extraShift, addPrize } = value as Record<string, unknown>;
+  return typeof extraShift === 'boolean' && addPrize === undefined;
+}

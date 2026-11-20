@@ -53,11 +53,52 @@ export function isGameOver(state: GameState): boolean {
   return state.prizeDeck.length === 0 && state.priceSlots.every((slot) => slot.prizes.length === 0);
 }
 
-export function applyGameEndIfDone(state: GameState): GameState {
-  if (!isGameOver(state)) return state;
+/**
+ * Shared tail for every version's game-end handling: stamp the final phase
+ * and winner list, and log it. Pulled out so v3's own endgame logic (see
+ * endgame.ts) can reuse it without duplicating the phase/log bookkeeping.
+ */
+export function finalizeGameEnd(state: GameState, winners: SeatId[]): GameState {
   const next = cloneState(state);
   next.phase = 'ended';
-  next.winner = determineWinners(next);
-  pushLog(next, next.winner.length > 1 ? `Shared victory: ${next.winner.join(', ')}.` : `${next.winner[0]} wins!`);
+  next.winner = winners;
+  pushLog(next, winners.length > 1 ? `Shared victory: ${winners.join(', ')}.` : `${winners[0]} wins!`);
   return next;
+}
+
+export function applyGameEndIfDone(state: GameState): GameState {
+  if (!isGameOver(state)) return state;
+  return finalizeGameEnd(state, determineWinners(state));
+}
+
+/**
+ * v3's color bonus: a singleton now scores 0 instead of v1/v2's 1 — every
+ * other step of the triangular progression (3, 6, 10) is unchanged. Kept as
+ * a one-line special case rather than a new formula, since it's the only
+ * value that actually differs.
+ */
+export function scoreForPrizesV3(prizes: PrizeCard[]): ScoreBreakdown {
+  const base = prizes.reduce((sum, p) => sum + p.points, 0);
+  if (prizes.length === 0) return { base, colorBonus: 0, total: base };
+  const counts = new Map<string, number>();
+  for (const p of prizes) counts.set(p.color, (counts.get(p.color) ?? 0) + 1);
+  const mostCommonCount = Math.max(...counts.values());
+  const colorBonus = mostCommonCount === 1 ? 0 : triangularNumber(mostCommonCount);
+  return { base, colorBonus, total: base + colorBonus };
+}
+
+export function computeScoreV3(state: GameState, seat: SeatId): number {
+  return scoreForPrizesV3(state.players[seat].wonPrizes).total;
+}
+
+export function computeFinalScoresV3(state: GameState): Record<SeatId, number> {
+  const scores = {} as Record<SeatId, number>;
+  for (const seat of state.seats) scores[seat] = computeScoreV3(state, seat);
+  return scores;
+}
+
+export function determineWinnersV3(state: GameState): SeatId[] {
+  const scores = computeFinalScoresV3(state);
+  const max = Math.max(...state.seats.map((s) => scores[s]));
+  return state.seats.filter((s) => scores[s] === max);
 }

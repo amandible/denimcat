@@ -8,6 +8,8 @@ export interface PrizeCard {
   id: string;
   color: PrizeColor;
   points: number;
+  /** Flavor name tying the card to its color's theme (e.g. "missing Watergate tapes") — introduced in v3. */
+  name: string;
 }
 
 export interface PriceSlot {
@@ -19,8 +21,17 @@ export interface PlayerState {
   seat: SeatId;
   /** Shuffled personal draw pile; hidden from everyone but the owner. Drawn from the end (the "top"). */
   deck: number[];
-  /** Currently playable card values (unique, 1-13); hidden from everyone but the owner. */
+  /** Currently playable card values; hidden from everyone but the owner. */
   hand: number[];
+  /**
+   * Spent bid cards, awaiting reshuffle into `deck` once it runs dry —
+   * introduced in v3 (v1/v2 never reshuffle, so this stays empty and unread
+   * for rooms pinned to those versions). Hidden from everyone, same as
+   * `deck`, since its contents would otherwise leak exactly what
+   * denominations remain in a player's deck+hand (the total composition is
+   * fixed and public).
+   */
+  discard: number[];
   wonPrizes: PrizeCard[];
 }
 
@@ -41,7 +52,12 @@ export interface AuctionState {
   winnerSeat: SeatId | null;
 }
 
-export type Phase = 'auction-active' | 'awaiting-prize-choice' | 'awaiting-new-prize-placement' | 'ended';
+export type Phase =
+  | 'auction-active'
+  | 'awaiting-prize-choice'
+  | 'awaiting-new-prize-placement'
+  | 'awaiting-endgame-prize-choice'
+  | 'ended';
 
 export interface GameState {
   /** Fixed for the room's lifetime, sized by player count. */
@@ -74,6 +90,13 @@ export interface GameState {
    * slot nobody can afford yet.
    */
   unlockedUpperSlots: number[];
+  /**
+   * Set only during the v3 endgame tie-break (phase 'awaiting-endgame-prize-choice'):
+   * the seat with the most money left in hand must pick which of the
+   * tied-for-lowest-value displayed prizes to take. Null otherwise —
+   * including for every v1/v2 room, which never reaches that phase.
+   */
+  endgameChoice: { seat: SeatId; prizeIds: string[] } | null;
   /** Human-readable play-by-play, newest entries last — see state.ts's pushLog. Public (bid amounts and prize choices are already public; only hands/decks are hidden), capped at MAX_LOG_ENTRIES. */
   log: string[];
 }

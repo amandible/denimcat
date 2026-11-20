@@ -61,6 +61,12 @@ export function App() {
   // a deploy mid-restart) is retried with a "waking up" notice instead of
   // being mistaken for "signed out" — see checkSessionWithRetry.
   useEffect(() => {
+    // Landing directly on /auth/verify means there's no stored token yet
+    // by definition — a token only exists once VerifyView's own flow
+    // (handleVerified) saves one. Without this guard, this generic check
+    // runs concurrently with that flow and asserts 'signed-out' first,
+    // which is simply wrong mid-verification, not just redundant.
+    if (route.kind === 'auth-verify') return;
     const token = loadSessionToken();
     if (!token) {
       setSession('signed-out');
@@ -80,6 +86,7 @@ export function App() {
       setSession(result.kind);
     });
     return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionCheckRun]);
 
   // A game socket's auth middleware rejected our session (expired/revoked

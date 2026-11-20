@@ -1,43 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { buildPrizePool, computePrices, dealGame } from '../src/setup';
+import { buildPrizePool, dealGame, priceSlotValues } from '../src/setup';
 
-describe('computePrices', () => {
-  const TILES = [
-    [2, 4],
-    [5, 9],
-    [7, 11],
-    [13, 15],
-    [16, 20],
-    [22, 24],
-  ];
-
-  it('produces exactly six positive-integer prices', () => {
-    const prices = computePrices(() => 0.42);
-    expect(prices).toHaveLength(6);
-    for (const p of prices) {
-      expect(Number.isInteger(p)).toBe(true);
-      expect(p).toBeGreaterThan(0);
-    }
+describe('priceSlotValues', () => {
+  it('returns the fixed 2-player slots', () => {
+    expect(priceSlotValues(2)).toEqual([0, 5, 10, 15, 20, 25]);
   });
 
-  it('every price is one of its own tile\'s two printed faces, in tile order', () => {
-    const prices = computePrices(() => 0.9);
-    prices.forEach((price, i) => {
-      expect(TILES[i]).toContain(price);
-    });
+  it('returns the fixed 3-player slots', () => {
+    expect(priceSlotValues(3)).toEqual([5, 10, 15, 20, 25, 30]);
   });
 
-  it('an rng below 0.5 always picks the lower face of each tile; at or above always picks the higher', () => {
-    expect(computePrices(() => 0)).toEqual(TILES.map(([low]) => low));
-    expect(computePrices(() => 0.5)).toEqual(TILES.map(([, high]) => high));
-    expect(computePrices(() => 0.999)).toEqual(TILES.map(([, high]) => high));
-  });
-
-  it('never produces a repeated price, across many real-random trials (every face value is already unique)', () => {
-    for (let i = 0; i < 300; i++) {
-      const prices = computePrices();
-      expect(new Set(prices).size).toBe(6);
-    }
+  it('returns the fixed 4-player slots', () => {
+    expect(priceSlotValues(4)).toEqual([10, 15, 20, 25, 30, 35]);
   });
 });
 
@@ -64,6 +38,13 @@ describe('buildPrizePool', () => {
     const pool = buildPrizePool(4);
     expect(new Set(pool.map((p) => p.id)).size).toBe(pool.length);
   });
+
+  it('gives every prize a non-empty flavor name', () => {
+    for (const p of buildPrizePool(4)) {
+      expect(typeof p.name).toBe('string');
+      expect(p.name.length).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe('dealGame', () => {
@@ -84,21 +65,20 @@ describe('dealGame', () => {
     expect(state.priceSlots[5].prizes).toHaveLength(0);
   });
 
-  it('stores price slots ascending by price', () => {
-    const state = dealGame(3, () => 0.61);
-    for (let i = 1; i < state.priceSlots.length; i++) {
-      expect(state.priceSlots[i].price).toBeGreaterThanOrEqual(state.priceSlots[i - 1].price);
-    }
+  it('stores the fixed price slots for the player count, ascending by price', () => {
+    expect(dealGame(3, () => 0.61).priceSlots.map((s) => s.price)).toEqual([5, 10, 15, 20, 25, 30]);
+    expect(dealGame(4, () => 0.61).priceSlots.map((s) => s.price)).toEqual([10, 15, 20, 25, 30, 35]);
   });
 
-  it("deals each player a 2-card hand from their own shuffled 1-13 deck", () => {
+  it('deals each player a 2-card hand from their own shuffled four-10s/four-5s/four-1s deck', () => {
     const state = dealGame(2, () => 0.15);
     for (const seat of state.seats) {
       const player = state.players[seat];
       expect(player.hand).toHaveLength(2);
-      expect(player.deck).toHaveLength(11);
+      expect(player.deck).toHaveLength(10);
+      expect(player.discard).toEqual([]);
       const allCards = [...player.hand, ...player.deck].sort((a, b) => a - b);
-      expect(allCards).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+      expect(allCards).toEqual([1, 1, 1, 1, 5, 5, 5, 5, 10, 10, 10, 10]);
     }
   });
 

@@ -1,6 +1,7 @@
 import type { RulesetVersion } from '@denimcat/shared';
 import { v1Ruleset } from './prizes';
 import { v2Ruleset } from './rulesetV2';
+import { v3Ruleset } from './rulesetV3';
 import type { MintConditionRuleset } from './ruleset';
 
 export const RULESET_VERSIONS: Record<string, RulesetVersion<MintConditionRuleset>> = {
@@ -16,9 +17,17 @@ export const RULESET_VERSIONS: Record<string, RulesetVersion<MintConditionRulese
       "Winning an empty prize is now much better: You always get card draw, and can optionally accelerate prize movement or placement. Also, if it was a high slot, you draw more cards.",
     ruleset: v2Ruleset,
   },
+  v3: {
+    id: 'v3',
+    designerNote:
+      'Money deck composition has changed; decks now reshuffle when you run out of cards; empty slot wins give more cards; prizes have a theme; all players draw every turn.',
+    whatsNew:
+      'Money deck composition has changed; decks now reshuffle when you run out of cards; empty slot wins give more cards; prizes have a theme; all players draw every turn.',
+    ruleset: v3Ruleset,
+  },
 };
 
-export const CURRENT_RULESET_VERSION_ID = 'v2';
+export const CURRENT_RULESET_VERSION_ID = 'v3';
 
 // Cheap guard against the one mistake that would actually matter at
 // runtime — see docs/guides/game-rule-versions.md's obsoletion workflow.

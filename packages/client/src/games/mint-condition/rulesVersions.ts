@@ -1,11 +1,13 @@
 import type { ComponentType } from 'react';
 import { RulesContent } from './components/RulesContent';
 import { RulesContentV2 } from './components/RulesContentV2';
+import { RulesContentV3 } from './components/RulesContentV3';
 
 /** Mirrors engine-mint-condition's RULESET_VERSIONS — see docs/guides/game-rule-versions.md. */
 const RULES_CONTENT_BY_VERSION: Record<string, ComponentType> = {
   v1: RulesContent,
   v2: RulesContentV2,
+  v3: RulesContentV3,
 };
 
 /** Undefined means either v1 or a room older than versioning itself — both mean "the original rules." */

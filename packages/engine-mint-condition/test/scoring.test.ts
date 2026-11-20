@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeFinalScores, computeScore, determineWinners, isGameOver } from '../src/scoring';
+import { computeFinalScores, computeFinalScoresV3, computeScore, computeScoreV3, determineWinners, determineWinnersV3, isGameOver } from '../src/scoring';
 import { makeState, prize } from './helpers';
 
 describe('computeScore', () => {
@@ -35,6 +35,36 @@ describe('computeScore', () => {
       const state = makeState({ players: { p1: { wonPrizes } } });
       expect(computeScore(state, 'p1')).toBe(expected[count - 1]);
     }
+  });
+});
+
+describe('computeScoreV3', () => {
+  it('scores every step of v3\'s progression correctly: 0, 3, 6, 10 for counts 1-4 (singleton differs from v1/v2)', () => {
+    const expected = [0, 3, 6, 10];
+    for (let count = 1; count <= 4; count++) {
+      const wonPrizes = Array.from({ length: count }, (_, i) => prize(`r${i}`, 'red', 0));
+      const state = makeState({ players: { p1: { wonPrizes } } });
+      expect(computeScoreV3(state, 'p1')).toBe(expected[count - 1]);
+    }
+  });
+
+  it('still sums base points with no bonus for an empty collection', () => {
+    const state = makeState({ players: { p1: { wonPrizes: [] } } });
+    expect(computeScoreV3(state, 'p1')).toBe(0);
+  });
+});
+
+describe('computeFinalScoresV3 / determineWinnersV3', () => {
+  it('computes v3 scores and winners using the singleton-is-zero formula', () => {
+    const state = makeState({
+      seats: ['p1', 'p2'],
+      players: {
+        p1: { wonPrizes: [prize('a', 'red', 5)] }, // singleton -> base 5, bonus 0
+        p2: { wonPrizes: [prize('b', 'blue', 2), prize('c', 'blue', 1)] }, // pair -> base 3, bonus 3
+      },
+    });
+    expect(computeFinalScoresV3(state)).toEqual({ p1: 5, p2: 6 });
+    expect(determineWinnersV3(state)).toEqual(['p2']);
   });
 });
 

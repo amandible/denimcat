@@ -1,5 +1,6 @@
 import type { ActionResult, RoomLifecycleClientToServerEvents, RoomLifecycleServerToClientEvents } from '@denimcat/shared';
 import type { AuctionReward } from './prizes';
+import type { AuctionRewardChoiceV2, AuctionRewardChoiceV3 } from './ruleset';
 import type { GameState, Phase, PlayerCount, PriceSlot, PrizeCard, SeatId } from './types';
 
 export interface MintConditionConfig {
@@ -19,6 +20,8 @@ export interface MintConditionPlayerView {
   hand?: number[];
   /** Deck contents/order are never revealed to anyone, including the owner (blind draws). */
   deckSize: number;
+  /** Count only (not contents) — v3's discard pile is hidden the same way as the deck itself; see PlayerState.discard. Always 0 for a v1/v2 room. */
+  discardSize: number;
   wonPrizes: PrizeCard[];
 }
 
@@ -46,6 +49,8 @@ export interface MintConditionStateView {
   unlockedUpperSlots: number[];
   /** Prizes permanently removed from the game after pricing up too high — public. */
   discardPile: PrizeCard[];
+  /** v3's endgame tie-break, mirrored verbatim — see GameState.endgameChoice. Always null for a v1/v2 room. */
+  endgameChoice: { seat: SeatId; prizeIds: string[] } | null;
   /** Human-readable play-by-play, newest entries last — see GameState.log's doc comment. */
   log: string[];
 }
@@ -65,6 +70,9 @@ export function toView(state: GameState, viewer: SeatId | 'spectator'): MintCond
       handSize: p.hand.length,
       hand: isOwner ? [...p.hand] : undefined,
       deckSize: p.deck.length,
+      // `?? 0` guards a room persisted before v3 added this field — see
+      // state.ts's clonePlayer, which has the same guard for the mutation path.
+      discardSize: p.discard?.length ?? 0,
       wonPrizes: p.wonPrizes.map((prize) => ({ ...prize })),
     };
   }
@@ -89,6 +97,7 @@ export function toView(state: GameState, viewer: SeatId | 'spectator'): MintCond
     winner: state.winner ? [...state.winner] : null,
     unlockedUpperSlots: [...state.unlockedUpperSlots],
     discardPile: state.discardPile.map((p) => ({ ...p })),
+    endgameChoice: state.endgameChoice ? { seat: state.endgameChoice.seat, prizeIds: [...state.endgameChoice.prizeIds] } : null,
     log: [...state.log],
   };
 }
@@ -98,8 +107,13 @@ export interface ClientToServerEvents
   place_bid: (payload: { roomCode: string; cards: number[] }, cb: (res: ActionResult) => void) => void;
   pass: (payload: { roomCode: string }, cb: (res: ActionResult) => void) => void;
   take_prize: (payload: { roomCode: string; prizeId: string }, cb: (res: ActionResult) => void) => void;
-  choose_auction_reward: (payload: { roomCode: string; reward: AuctionReward }, cb: (res: ActionResult) => void) => void;
+  choose_auction_reward: (
+    payload: { roomCode: string; reward: AuctionReward | AuctionRewardChoiceV2 | AuctionRewardChoiceV3 },
+    cb: (res: ActionResult) => void,
+  ) => void;
   place_new_prize: (payload: { roomCode: string; slotIndex: number }, cb: (res: ActionResult) => void) => void;
+  /** v3 only — resolves the endgame tie-break (see GameState.endgameChoice); any room not in that phase rejects it. */
+  choose_endgame_prize: (payload: { roomCode: string; prizeId: string }, cb: (res: ActionResult) => void) => void;
 }
 
 export type ServerToClientEvents = RoomLifecycleServerToClientEvents<SeatId, MintConditionStateView>;

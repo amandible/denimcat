@@ -48,6 +48,7 @@ export const mintConditionModule: GameModule<GameState, MintConditionConfig, Sea
   getActiveSeat(state) {
     if (state.phase === 'auction-active') return state.auction.activeSeat;
     if (state.phase === 'awaiting-prize-choice' || state.phase === 'awaiting-new-prize-placement') return state.auction.winnerSeat;
+    if (state.phase === 'awaiting-endgame-prize-choice') return state.endgameChoice?.seat ?? null;
     return null; // 'ended'
   },
   isRoomFinished: (state) => state.phase === 'ended',
