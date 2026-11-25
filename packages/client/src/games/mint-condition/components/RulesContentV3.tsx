@@ -63,59 +63,15 @@ export function RulesContentV3() {
         3 or 4 player game, and cards marked with two stars (**) are only used in a four-player game.
       </p>
       <p>
-        <strong>Blue (print)</strong>
-      </p>
-      <ul style={{ marginTop: 4 }}>
-        <li>4 — handwritten &ldquo;I Have A Dream&rdquo; draft</li>
-        <li>2 — &ldquo;The Vengeance of Nitocris&rdquo; manuscript</li>
-        <li>2 — The Mystery of Edwin Drood ending (hoax)</li>
-        <li>1 — A Humument 1st edition</li>
+        <ul>
+        <li>Blue (print) - 4, 2, 1, 1</li>
+        <li>Red (gaming) - 3, 3, 2, 1</li>
+        <li>Yellow (audio) - 5, 1, 1, 1</li>
+        <li>Green (toys) - 4*, 3*, 2*, 0*</li>
+        <li>Purple (antique gripes) - 5*, 4*, 0**, 0**</li>
+        <li>Orange (curiosities) - 2**, 2**, 2**, 2**</li>
       </ul>
-      <p>
-        <strong>Red (gaming)</strong>
-      </p>
-      <ul style={{ marginTop: 4 }}>
-        <li>3 — Vimose Hnefatafl set</li>
-        <li>3 — Lewis chessman</li>
-        <li>2 — Vettweiss-Froitzheim dice tower</li>
-        <li>1 — Visconti-Sforza tarot deck</li>
-      </ul>
-      <p>
-        <strong>Yellow (audio)</strong>
-      </p>
-      <ul style={{ marginTop: 4 }}>
-        <li>5 — missing Watergate tapes</li>
-        <li>1 — Casey Kasem swearing at his staff</li>
-        <li>1 — The &ldquo;Butcher Cover&rdquo; LP</li>
-        <li>1 — Once Upon A Time In Shaolin</li>
-      </ul>
-      <p>
-        <strong>Green (toys)*</strong>
-      </p>
-      <ul style={{ marginTop: 4 }}>
-        <li>4 — Inland Steel Barbie</li>
-        <li>3 — Lego Sears Tower</li>
-        <li>2 — Green Unicron Optimus Prime</li>
-        <li>0 — Number 1 Bear</li>
-      </ul>
-      <p>
-        <strong>Purple (antique gripes)</strong>
-      </p>
-      <ul style={{ marginTop: 4 }}>
-        <li>*5 — criticism of Ea-Nasir&rsquo;s copper</li>
-        <li>*4 — letter from Iddin-Sin to Vinu demanding nicer clothes</li>
-        <li>**0 — sock requisition from Vindolanda</li>
-        <li>**0 — Scots-Roman curse roll</li>
-      </ul>
-      <p>
-        <strong>Orange (curiosities)**</strong>
-      </p>
-      <ul style={{ marginTop: 4 }}>
-        <li>2 — insect pigment</li>
-        <li>2 — laughing automaton</li>
-        <li>2 — clown egg</li>
-        <li>2 — glass flower</li>
-      </ul>
+    </p>
 
       <h4>End of game</h4>
       <p>
